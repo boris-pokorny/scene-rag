@@ -4,7 +4,8 @@ from datetime import timedelta
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from support.fakes import AGED, T0, FakeMedia, make_harness, sha256_version
+
+from tests.support.fakes import AGED, T0, FakeMedia, make_harness, sha256_version
 
 ASSET_IDS = [f"asset-{index:016x}" for index in range(4)]
 BLOBS = [b"a", b"bb", b"ccc"]

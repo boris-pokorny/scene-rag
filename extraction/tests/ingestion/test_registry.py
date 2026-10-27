@@ -10,7 +10,6 @@ from typing import Protocol
 
 import pytest
 from pymongo import MongoClient
-from support.fakes import T0, FakeAssetRegistry, make_record, make_reference, sha256_version
 
 from scene_rag.extraction.ingestion import models
 from scene_rag.extraction.ingestion.protocols import (
@@ -25,6 +24,7 @@ from scene_rag.extraction.ingestion.registry import (
     from_document,
     to_document,
 )
+from tests.support.fakes import T0, make_record, make_reference, sha256_version
 
 LATER = T0 + timedelta(minutes=5)
 LOCAL = make_reference("asset-0000000000000001")
@@ -38,7 +38,7 @@ class Registry(AssetRegistryReader, AssetRegistryWriter, Protocol):
 @pytest.fixture(params=["fake", pytest.param("mongo", marks=pytest.mark.integration)])
 def registry(request: pytest.FixtureRequest) -> Iterator[Registry]:
     if request.param == "fake":
-        yield FakeAssetRegistry()
+        yield request.getfixturevalue("fake_registry")
         return
     client: MongoClient[Document] = request.getfixturevalue("mongo_client")
     database = f"scene_rag_test_{uuid.uuid4().hex[:8]}"

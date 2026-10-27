@@ -43,7 +43,7 @@ worker = "python -m scene_rag.extraction worker"
 
 [tool.ruff]
 line-length = 100
-src = ["src"]
+src = ["src", "."]
 extend-exclude = ["__pypackages__"]
 
 [tool.ruff.lint]
@@ -59,7 +59,7 @@ convention = "google"
 [tool.mypy]
 strict = true
 files = ["src", "tests"]
-mypy_path = "src:tests"
+mypy_path = "src"
 namespace_packages = true
 explicit_package_bases = true
 warn_unreachable = true
@@ -80,7 +80,6 @@ skip_covered = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
 markers = [
     "integration: needs a reachable MongoDB at SCENE_RAG_EXTRACTION_REGISTRY_URI",
 ]

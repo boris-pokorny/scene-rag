@@ -34,14 +34,17 @@ pdm run worker --step ingestion --once     # one pass; needs no poll interval
 pdm run worker --step ingestion            # poll every SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS
 ```
 
-| Variable | Value in `.env.example` |
-|---|---|
-| `SCENE_RAG_EXTRACTION_REGISTRY_URI` | `mongodb://localhost:27017` |
-| `SCENE_RAG_EXTRACTION_REGISTRY_DATABASE` | `scene_rag_extraction` |
-| `SCENE_RAG_EXTRACTION_SOURCE_ROOT` | `data/media` |
-| `SCENE_RAG_EXTRACTION_SOURCE_ID` | `local` |
-| `SCENE_RAG_EXTRACTION_SOURCE_ENTITLEMENTS` | `public` |
-| `SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS` | `30` (only the loop needs it) |
+Every variable but the poll interval is required; a missing one ends the process with a
+message naming it. Sample values for a local run are in `.env.example`.
+
+| Variable | Meaning | Required |
+|---|---|---|
+| `SCENE_RAG_EXTRACTION_REGISTRY_URI` | MongoDB connection string of the Asset Registry. Credentials in it are redacted from logs. | yes |
+| `SCENE_RAG_EXTRACTION_REGISTRY_DATABASE` | Database holding the registry collection. | yes |
+| `SCENE_RAG_EXTRACTION_SOURCE_ROOT` | Directory the filesystem connector lists; must exist. Relative paths resolve against the working directory. | yes |
+| `SCENE_RAG_EXTRACTION_SOURCE_ID` | Identifier stamped on every source reference the connector registers. | yes |
+| `SCENE_RAG_EXTRACTION_SOURCE_ENTITLEMENTS` | Comma-separated entitlements granted to every file; the filesystem has no permission model of its own. At least one. | yes |
+| `SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS` | Seconds between two passes of the worker loop; positive. Also the first pause after a failed pass. | loop only; unused with `--once` |
 
 Each pass lists the source, hashes new or changed files, and issues one registry command per
 change: register a version, add a source reference (the same bytes under two paths are one
@@ -67,7 +70,9 @@ pdm run test-integration  # only the MongoDB cases, without the coverage thresho
 ```
 
 Tests are named `given_<state>_when_<event>_then_<outcome>` and grouped in one class per
-subject; fakes and builders live in `tests/support/`. Code follows the Google Python Style Guide for docstrings (enforced by ruff's `D` rules) and
+subject. The fakes and builders live in `tests/support/fakes.py`; `tests/conftest.py` wires them
+into the `harness` and `fake_registry` fixtures, which a test class may override under the same
+name to seed state. Code follows the Google Python Style Guide for docstrings (enforced by ruff's `D` rules) and
 strict typing (`ANN` rules and mypy strict). `tests/architecture/` enforces the import rules:
 no cross-step imports, the environment is read only in `bootstrap.py`, pymongo
 is confined to the registry backend and bootstrap, and only `ingestion` may import the

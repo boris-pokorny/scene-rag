@@ -6,9 +6,9 @@ from pathlib import Path
 
 import jsonschema
 import pytest
-from support.fakes import make_record, make_reference, sha256_version
 
 from scene_rag.extraction.ingestion.registry import from_document, to_document
+from tests.support.fakes import make_record, make_reference, sha256_version
 
 CONTRACTS = Path(__file__).resolve().parents[2] / "contracts" / "internal"
 SCHEMA = json.loads((CONTRACTS / "asset-version.schema.json").read_text())

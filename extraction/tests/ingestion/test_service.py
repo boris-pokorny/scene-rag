@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta
 
 import pytest
-from support.fakes import (
+
+from scene_rag.extraction.ingestion import models
+from scene_rag.extraction.ingestion.config import IngestionConfig
+from scene_rag.extraction.ingestion.models import IngestionReport
+from tests.support.fakes import (
     AGED,
     PUBLIC,
     T0,
@@ -10,15 +14,10 @@ from support.fakes import (
     Harness,
     RacingWriter,
     RecordingWriter,
-    make_harness,
     make_record,
     make_reference,
     sha256_version,
 )
-
-from scene_rag.extraction.ingestion import models
-from scene_rag.extraction.ingestion.config import IngestionConfig
-from scene_rag.extraction.ingestion.models import IngestionReport
 
 A = "asset-00000000000000aa"
 B = "asset-00000000000000bb"
@@ -28,10 +27,6 @@ VERSION = sha256_version(b"hello")
 
 class TestGivenEmptyRegistry:
     """No version registered before the pass."""
-
-    @pytest.fixture
-    def harness(self) -> Harness:
-        return make_harness()
 
     def test_when_new_item_then_registers_version(self, harness: Harness) -> None:
         harness.source.items = [FakeMedia(A, b"hello", entitlements=frozenset({"team-x"}))]
@@ -139,8 +134,8 @@ class TestGivenRegisteredItem:
     """`ITEM` registered by an earlier pass; the clock has moved on to `later`."""
 
     @pytest.fixture
-    def harness(self) -> Harness:
-        harness = make_harness(ITEM)
+    def harness(self, harness: Harness) -> Harness:
+        harness.source.items = [ITEM]
         harness.service.run_once()
         harness.writer.commands.clear()
         return harness
@@ -285,8 +280,8 @@ class TestGivenSharedVersion:
     """One version held by two items, `A` and `B`, of the same source."""
 
     @pytest.fixture
-    def harness(self) -> Harness:
-        harness = make_harness(FakeMedia(A, b"same"), FakeMedia(B, b"same"))
+    def harness(self, harness: Harness) -> Harness:
+        harness.source.items = [FakeMedia(A, b"same"), FakeMedia(B, b"same")]
         harness.service.run_once()
         return harness
 
@@ -311,8 +306,8 @@ class TestGivenCrashedPass:
     NEW = sha256_version(b"changed")
 
     @pytest.fixture
-    def harness(self) -> Harness:
-        harness = make_harness(ITEM)
+    def harness(self, harness: Harness) -> Harness:
+        harness.source.items = [ITEM]
         harness.service.run_once()
         later = harness.clock.tick()
         changed_at = later - AGED
@@ -352,8 +347,8 @@ class TestGivenRetiredVersion:
     """`ITEM` registered, then gone from the listing, so its version is tombstoned."""
 
     @pytest.fixture
-    def harness(self) -> Harness:
-        harness = make_harness(ITEM)
+    def harness(self, harness: Harness) -> Harness:
+        harness.source.items = [ITEM]
         harness.service.run_once()
         harness.source.items = []
         harness.service.run_once()
@@ -373,16 +368,16 @@ class TestGivenRetiredVersion:
 class TestGivenYoungItem:
     """Items modified less than `min_age_seconds` before the pass: still being copied, maybe."""
 
-    def test_when_new_then_deferred_and_nothing_written(self) -> None:
-        harness = make_harness(FakeMedia(A, b"hello", modified_at=T0))
+    def test_when_new_then_deferred_and_nothing_written(self, harness: Harness) -> None:
+        harness.source.items = [FakeMedia(A, b"hello", modified_at=T0)]
 
         report = harness.service.run_once()
 
         assert report == IngestionReport(deferred=1)
         assert harness.writer.commands == []
 
-    def test_when_registered_item_changed_then_old_reference_kept(self) -> None:
-        harness = make_harness(ITEM)
+    def test_when_registered_item_changed_then_old_reference_kept(self, harness: Harness) -> None:
+        harness.source.items = [ITEM]
         harness.service.run_once()
         later = harness.clock.tick()
         harness.source.items = [FakeMedia(A, b"changed", modified_at=later)]
@@ -394,8 +389,8 @@ class TestGivenYoungItem:
         assert harness.writer.commands == []
         assert [r.version for r in harness.registry.list_by_source("local")] == [VERSION]
 
-    def test_when_aged_then_next_pass_registers_it(self) -> None:
-        harness = make_harness(FakeMedia(A, b"hello", modified_at=T0))
+    def test_when_aged_then_next_pass_registers_it(self, harness: Harness) -> None:
+        harness.source.items = [FakeMedia(A, b"hello", modified_at=T0)]
         harness.service.run_once()
         harness.clock.tick()
 
@@ -408,33 +403,33 @@ class TestGivenYoungItem:
 class TestGivenChangingItem:
     """Items whose size or modification time move while they are hashed."""
 
-    def test_when_grown_after_hashing_then_deferred(self) -> None:
-        item = FakeMedia(A, b"hello", refreshed=FakeMedia(A, b"hello world"))
-        harness = make_harness(item)
+    def test_when_grown_after_hashing_then_deferred(self, harness: Harness) -> None:
+        harness.source.items = [FakeMedia(A, b"hello", refreshed=FakeMedia(A, b"hello world"))]
 
         report = harness.service.run_once()
 
         assert report == IngestionReport(deferred=1)
         assert harness.registry.get(VERSION) is None
 
-    def test_when_touched_after_hashing_then_deferred(self) -> None:
-        item = FakeMedia(A, b"hello", refreshed=FakeMedia(A, b"hello", modified_at=T0))
-        harness = make_harness(item)
+    def test_when_touched_after_hashing_then_deferred(self, harness: Harness) -> None:
+        harness.source.items = [
+            FakeMedia(A, b"hello", refreshed=FakeMedia(A, b"hello", modified_at=T0))
+        ]
 
         report = harness.service.run_once()
 
         assert report == IngestionReport(deferred=1)
 
-    def test_when_stream_longer_than_listed_then_deferred(self) -> None:
-        harness = make_harness(FakeMedia(A, b"hello", declared_size=3))
+    def test_when_stream_longer_than_listed_then_deferred(self, harness: Harness) -> None:
+        harness.source.items = [FakeMedia(A, b"hello", declared_size=3)]
 
         report = harness.service.run_once()
 
         assert report == IngestionReport(deferred=1)
         assert harness.writer.commands == []
 
-    def test_when_refresh_fails_then_counts_failure(self) -> None:
-        harness = make_harness(FakeMedia(A, b"hello", fail_refresh=True))
+    def test_when_refresh_fails_then_counts_failure(self, harness: Harness) -> None:
+        harness.source.items = [FakeMedia(A, b"hello", fail_refresh=True)]
 
         report = harness.service.run_once()
 
