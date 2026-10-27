@@ -1,5 +1,7 @@
 """The composed worker against real files and a real MongoDB (`integration`)."""
 
+import os
+import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -35,6 +37,13 @@ def media_dir(
     return root
 
 
+def write_aged(path: Path, data: bytes) -> None:
+    """Write the file dated a minute back, past the step's minimum age, so it is hashed now."""
+    path.write_bytes(data)
+    aged = time.time() - 60
+    os.utime(path, (aged, aged))
+
+
 def live_filenames(client: MongoClient[Document], database: str) -> dict[str, list[str]]:
     collection = client[database][COLLECTION]
     return {
@@ -49,17 +58,17 @@ class TestGivenMediaDirectory:
     def test_when_files_change_then_registry_follows(
         self, media_dir: Path, mongo_client: MongoClient[Document], database: str
     ) -> None:
-        (media_dir / "a.mp4").write_bytes(b"first")
+        write_aged(media_dir / "a.mp4", b"first")
         bootstrap.run_worker(once=True)
         assert live_filenames(mongo_client, database) == {"sha256:a7937b64b8caa": ["a.mp4"]}
 
-        (media_dir / "copy.mp4").write_bytes(b"first")
+        write_aged(media_dir / "copy.mp4", b"first")
         bootstrap.run_worker(once=True)
         assert live_filenames(mongo_client, database) == {
             "sha256:a7937b64b8caa": ["a.mp4", "copy.mp4"]
         }
 
-        (media_dir / "copy.mp4").write_bytes(b"second")
+        write_aged(media_dir / "copy.mp4", b"second")
         bootstrap.run_worker(once=True)
         assert live_filenames(mongo_client, database) == {
             "sha256:a7937b64b8caa": ["a.mp4"],

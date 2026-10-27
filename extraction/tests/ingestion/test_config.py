@@ -24,6 +24,8 @@ class TestGivenConfig:
             lambda: IngestionConfig(media_types={".mp4": "video"}),
             lambda: IngestionConfig(hash_algorithm="no-such-hash"),
             lambda: IngestionConfig(min_size_bytes=-1),
+            lambda: IngestionConfig(min_age_seconds=-1.0),
+            lambda: IngestionConfig(min_age_seconds=float("nan")),
         ],
     )
     def test_when_value_invalid_then_rejected(self, build: Callable[[], IngestionConfig]) -> None:

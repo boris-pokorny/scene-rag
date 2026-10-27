@@ -8,6 +8,15 @@ SCHEMA_VERSION: Final = 1
 STEP_NAME: Final = "ingestion"
 
 
+def truncate_to_millisecond(moment: datetime) -> datetime:
+    """Return ``moment`` with its microseconds truncated to the millisecond.
+
+    The registry stores BSON dates, which hold milliseconds. Every timestamp the step produces
+    or compares is truncated first, so a round-tripped value equals a fresh one.
+    """
+    return moment.replace(microsecond=moment.microsecond // 1000 * 1000)
+
+
 @dataclasses.dataclass(frozen=True)
 class SourceReference:
     """One source system's reference to the bytes of an asset version.
@@ -109,6 +118,8 @@ class IngestionReport:
         retired: References removed because their item left the source listing.
         quarantined: Listed items that failed validation; not registered, and any earlier
             reference of theirs is retired as if the item had left the listing.
+        deferred: Listed items left for the next pass because they were modified too recently
+            or changed while being hashed; any earlier reference of theirs is kept.
         failed: Listed items that raised; the pass continued past them.
     """
 
@@ -117,6 +128,7 @@ class IngestionReport:
     superseded: int = 0
     retired: int = 0
     quarantined: int = 0
+    deferred: int = 0
     failed: int = 0
 
     def __str__(self) -> str:

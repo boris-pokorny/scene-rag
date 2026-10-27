@@ -19,6 +19,7 @@ from scene_rag.extraction.ingestion.protocols import (
     UnknownVersionError,
 )
 from scene_rag.extraction.ingestion.registry import (
+    COLLECTION,
     Document,
     MongoAssetRegistry,
     from_document,
@@ -163,3 +164,22 @@ class TestGivenRecord:
             source["modified_at"] = T0.replace(tzinfo=None)
 
         assert from_document(document) == record
+
+
+@pytest.mark.integration
+class TestGivenMongoCollection:
+    """The MongoDB collection as `MongoAssetRegistry` prepares it."""
+
+    def test_when_created_then_list_by_source_served_by_compound_index(
+        self, mongo_client: MongoClient[Document]
+    ) -> None:
+        database = f"scene_rag_test_{uuid.uuid4().hex[:8]}"
+        try:
+            MongoAssetRegistry(mongo_client, database)
+            indexes = mongo_client[database][COLLECTION].index_information().values()
+            keys = [tuple(index["key"]) for index in indexes]
+        finally:
+            mongo_client.drop_database(database)
+
+        assert (("retired_at", 1), ("sources.source_id", 1)) in keys
+        assert (("retired_at", 1),) not in keys

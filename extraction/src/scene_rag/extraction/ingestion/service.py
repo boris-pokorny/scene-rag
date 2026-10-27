@@ -4,7 +4,7 @@ import dataclasses
 import hashlib
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Final
 
 from scene_rag.extraction.ingestion import models
@@ -39,6 +39,10 @@ class IngestionService:
 
     Items failing validation are quarantined: logged as warnings, counted, never hashed or
     registered, and treated as absent so that any earlier reference of theirs is retired.
+
+    An item that would be hashed but was modified less than `IngestionConfig.min_age_seconds`
+    ago, or whose size or modification time moved while it was hashed, is deferred: counted,
+    left untouched in the registry, and picked up by a later pass once it has settled.
     """
 
     def __init__(
@@ -124,22 +128,33 @@ class IngestionService:
                 logger.info("refreshed %s on %s", item.uri, held_record.version)
             return dataclasses.replace(report, unchanged=report.unchanged + 1)
 
-        version = self._hash(item)
+        age = now - item.modified_at
+        if age < timedelta(seconds=self._config.min_age_seconds):
+            logger.info("deferred %s (%s): modified %s ago", item.uri, item.asset_id, age)
+            return dataclasses.replace(report, deferred=report.deferred + 1)
+
+        version, hashed_bytes = self._hash(item)
+        fresh = item.refresh()
+        if (
+            hashed_bytes != item.size_bytes
+            or fresh.size_bytes != item.size_bytes
+            or fresh.modified_at != item.modified_at
+        ):
+            logger.warning("deferred %s (%s): changed while hashing", item.uri, item.asset_id)
+            return dataclasses.replace(report, deferred=report.deferred + 1)
+
         reference = self._reference(item, now)
         same_bytes = any(record.version == version for record, _ in holders)
-        if self._reader.get(version) is None:
-            record = models.AssetVersion(
-                version=version,
-                media_type=item.media_type,
-                size_bytes=item.size_bytes,
-                sources=(reference,),
-                first_seen_at=now,
-                lineage=models.Lineage(fingerprint=self._fingerprint, version=version),
-            )
-            if self._writer.register_version(record):
-                logger.info("registered %s as %s", item.uri, version)
-            else:
-                self._writer.add_source_reference(version, reference)
+        record = models.AssetVersion(
+            version=version,
+            media_type=item.media_type,
+            size_bytes=item.size_bytes,
+            sources=(reference,),
+            first_seen_at=now,
+            lineage=models.Lineage(fingerprint=self._fingerprint, version=version),
+        )
+        if self._writer.register_version(record):
+            logger.info("registered %s as %s", item.uri, version)
         else:
             self._writer.add_source_reference(version, reference)
             logger.info("added %s to %s", item.uri, version)
@@ -191,9 +206,12 @@ class IngestionService:
             and reference.entitlements == item.entitlements
         )
 
-    def _hash(self, item: DiscoveredMedia) -> str:
+    def _hash(self, item: DiscoveredMedia) -> tuple[str, int]:
+        """Return the item's version and the number of bytes that went into it."""
         digest = hashlib.new(self._config.hash_algorithm)
+        hashed_bytes = 0
         with item.open() as stream:
             while chunk := stream.read(_READ_CHUNK_BYTES):
                 digest.update(chunk)
-        return f"{self._config.hash_algorithm}:{digest.hexdigest()}"
+                hashed_bytes += len(chunk)
+        return f"{self._config.hash_algorithm}:{digest.hexdigest()}", hashed_bytes

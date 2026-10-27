@@ -92,6 +92,24 @@ class TestGivenDirectory:
         with pytest.raises(FileNotFoundError, match="source root"):
             next(source.list())
 
+    def test_when_file_rewritten_then_refresh_reports_new_size_and_mtime(self, root: Path) -> None:
+        first = next(make_source(root).list())
+        (root / "a.MOV").write_bytes(b"aaaa")
+        os.utime(root / "a.MOV", (STAMP + 1, STAMP + 1))
+
+        fresh = first.refresh()
+
+        assert (first.size_bytes, fresh.size_bytes) == (2, 4)
+        assert fresh.modified_at == to_millisecond_utc(STAMP + 1)
+        assert (fresh.asset_id, fresh.uri) == (first.asset_id, first.uri)
+
+    def test_when_file_deleted_then_refresh_raises(self, root: Path) -> None:
+        first = next(make_source(root).list())
+        (root / "a.MOV").unlink()
+
+        with pytest.raises(OSError, match="a.MOV"):
+            first.refresh()
+
     def test_when_listed_then_modified_at_truncated_to_milliseconds(self, root: Path) -> None:
         first = next(make_source(root).list())
 

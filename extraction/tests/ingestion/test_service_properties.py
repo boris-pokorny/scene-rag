@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from support.fakes import T0, FakeMedia, make_harness, sha256_version
+from support.fakes import AGED, T0, FakeMedia, make_harness, sha256_version
 
 ASSET_IDS = [f"asset-{index:016x}" for index in range(4)]
 BLOBS = [b"a", b"bb", b"ccc"]
@@ -16,9 +16,10 @@ histories = st.lists(listings, min_size=1, max_size=6)
 
 def media_for(listing: dict[str, bytes]) -> list[FakeMedia]:
     # Same bytes imply the same mtime, so unchanged items take the no-hash path and changed
-    # items take the hashing path, as they would on a real filesystem.
+    # items take the hashing path, as they would on a real filesystem. Every mtime is older
+    # than the clock, so nothing is deferred.
     return [
-        FakeMedia(asset_id, blob, modified_at=T0 + timedelta(seconds=len(blob)))
+        FakeMedia(asset_id, blob, modified_at=T0 - AGED + timedelta(seconds=len(blob)))
         for asset_id, blob in sorted(listing.items())
     ]
 

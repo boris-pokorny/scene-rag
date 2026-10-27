@@ -17,6 +17,9 @@ from scene_rag.extraction.ingestion.protocols import (
 from scene_rag.extraction.ingestion.service import IngestionService
 
 T0 = datetime(2026, 10, 27, 9, 0, tzinfo=UTC)
+# Listed items are a minute old by default: older than `IngestionConfig.min_age_seconds`, so
+# the hashing path runs; a test that wants deferral dates its item at the clock's time.
+AGED = timedelta(minutes=1)
 SOURCE_ID = "local"
 PUBLIC = frozenset({"public"})
 
@@ -41,16 +44,23 @@ class FakeClock:
 
 @dataclasses.dataclass(frozen=True)
 class FakeMedia:
-    """DiscoveredMedia backed by bytes in memory."""
+    """DiscoveredMedia backed by bytes in memory.
+
+    `declared_size` makes the listing lie about the length of `data`; `refreshed` is what
+    `refresh` returns instead of the item itself, to simulate a file changing while hashed.
+    """
 
     asset_id: str
     data: bytes
     filename: str = "clip.mp4"
     media_type: str = "video/mp4"
-    modified_at: datetime = T0
+    modified_at: datetime = T0 - AGED
     entitlements: frozenset[str] = PUBLIC
     fail_open: bool = False
     read_sizes: list[int] | None = None
+    declared_size: int | None = None
+    refreshed: FakeMedia | None = None
+    fail_refresh: bool = False
 
     @property
     def uri(self) -> str:
@@ -58,7 +68,7 @@ class FakeMedia:
 
     @property
     def size_bytes(self) -> int:
-        return len(self.data)
+        return len(self.data) if self.declared_size is None else self.declared_size
 
     def open(self) -> BinaryIO:
         if self.fail_open:
@@ -66,6 +76,11 @@ class FakeMedia:
         if self.read_sizes is not None:
             return RecordingStream(self.data, self.read_sizes)
         return io.BytesIO(self.data)
+
+    def refresh(self) -> FakeMedia:
+        if self.fail_refresh:
+            raise OSError(f"cannot inspect {self.uri}")
+        return self if self.refreshed is None else self.refreshed
 
 
 class RecordingStream(io.BytesIO):

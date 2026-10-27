@@ -30,7 +30,7 @@ a pull request, which changes the step's fingerprint.
 
 ```sh
 cp some-video.mp4 data/media/
-pdm run worker --step ingestion --once     # one pass
+pdm run worker --step ingestion --once     # one pass; needs no poll interval
 pdm run worker --step ingestion            # poll every SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS
 ```
 
@@ -41,16 +41,20 @@ pdm run worker --step ingestion            # poll every SCENE_RAG_EXTRACTION_POL
 | `SCENE_RAG_EXTRACTION_SOURCE_ROOT` | `data/media` |
 | `SCENE_RAG_EXTRACTION_SOURCE_ID` | `local` |
 | `SCENE_RAG_EXTRACTION_SOURCE_ENTITLEMENTS` | `public` |
-| `SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS` | `30` |
+| `SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS` | `30` (only the loop needs it) |
 
 Each pass lists the source, hashes new or changed files, and issues one registry command per
 change: register a version, add a source reference (the same bytes under two paths are one
 version with two references), refresh a reference whose metadata (entitlements, path) changed,
 supersede a reference whose file changed, retire references of files that disappeared. A pass
-that fails in the loop is logged and retried after the poll interval; a source root that is
-missing aborts the pass instead of retiring everything. Files failing validation (below `min_size_bytes`) are quarantined:
-logged, counted, never registered. Nothing is deleted; a version nobody holds gets a `retired_at`
-tombstone. The record schema is `contracts/internal/asset-version.schema.json`.
+that fails in the loop is logged and retried after a pause that doubles with every consecutive
+failure, from the poll interval up to five minutes; a source root that is missing aborts the
+pass instead of retiring everything. Files failing validation (below `min_size_bytes`) are
+quarantined: logged, counted, never registered. Files modified less than `min_age_seconds` ago,
+or whose size or modification time moved while they were hashed (a copy still in progress), are
+deferred to a later pass with their earlier reference kept. Nothing is deleted; a version nobody
+holds gets a `retired_at` tombstone. The record schema is
+`contracts/internal/asset-version.schema.json`.
 
 ## Develop
 

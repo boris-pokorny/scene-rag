@@ -118,12 +118,16 @@ class MongoAssetRegistry:
     """Asset Registry over one MongoDB collection, ``_id`` being the version."""
 
     def __init__(self, client: MongoClient[Document], database: str) -> None:
-        """Bind to ``database`` on ``client`` and ensure the indexes exist."""
+        """Bind to ``database`` on ``client`` and ensure the indexes exist.
+
+        The compound ``(retired_at, sources.source_id)`` index serves `list_by_source`
+        directly; its prefix serves queries on the tombstone alone.
+        """
         self._collection = client[database][COLLECTION]
         self._collection.create_index(
             [("sources.source_id", ASCENDING), ("sources.asset_id", ASCENDING)]
         )
-        self._collection.create_index([("retired_at", ASCENDING)])
+        self._collection.create_index([("retired_at", ASCENDING), ("sources.source_id", ASCENDING)])
 
     def get(self, version: str) -> models.AssetVersion | None:
         """Return the version with the given content hash, live or retired."""

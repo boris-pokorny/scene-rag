@@ -37,7 +37,8 @@ class IngestionSettings:
         source_id: Identifier the connector stamps on its source references.
         source_entitlements: Entitlements the connector grants every item it lists; the
             filesystem has no permission model of its own.
-        poll_interval_seconds: Pause between two passes of the worker loop.
+        poll_interval_seconds: Pause between two passes of the worker loop; ``None`` when the
+            step runs a single pass and never sleeps.
     """
 
     registry_uri: str
@@ -45,7 +46,7 @@ class IngestionSettings:
     source_root: Path
     source_id: str
     source_entitlements: frozenset[str]
-    poll_interval_seconds: float
+    poll_interval_seconds: float | None = None
 
     @property
     def redacted_registry_uri(self) -> str:
@@ -55,6 +56,9 @@ class IngestionSettings:
     def __post_init__(self) -> None:
         """Validate the values.
 
+        The values are checked for shape only; whether ``source_root`` exists is a question
+        for the composition root, not for a value object.
+
         Raises:
             ValueError: When a value cannot connect or run the step.
         """
@@ -62,11 +66,10 @@ class IngestionSettings:
             raise ValueError("registry_uri must not be empty")
         if not self.registry_database:
             raise ValueError("registry_database must not be empty")
-        if not self.source_root.is_dir():
-            raise ValueError(f"source_root is not a directory: {self.source_root}")
         if not self.source_id:
             raise ValueError("source_id must not be empty")
         if not self.source_entitlements:
             raise ValueError("source_entitlements must name at least one entitlement")
-        if not (math.isfinite(self.poll_interval_seconds) and self.poll_interval_seconds > 0):
+        interval = self.poll_interval_seconds
+        if interval is not None and not (math.isfinite(interval) and interval > 0):
             raise ValueError("poll_interval_seconds must be a positive finite number")

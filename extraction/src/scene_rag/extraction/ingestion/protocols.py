@@ -58,6 +58,19 @@ class DiscoveredMedia(Protocol):
         """
         ...
 
+    def refresh(self) -> DiscoveredMedia:
+        """Re-read the item's size and modification time from the source.
+
+        Called after hashing, to detect an item that changed while its bytes were read.
+
+        Returns:
+            A new item describing the same asset as the source reports it now.
+
+        Raises:
+            OSError: When the item is gone or cannot be inspected.
+        """
+        ...
+
 
 class MediaSource(Protocol):
     """A connector: the anti-corruption layer over one source system."""

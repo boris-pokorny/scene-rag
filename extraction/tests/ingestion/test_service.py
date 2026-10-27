@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from support.fakes import (
+    AGED,
     PUBLIC,
     T0,
     FailingMediaSource,
@@ -159,7 +160,7 @@ class TestGivenRegisteredItem:
     def test_when_only_mtime_changes_then_refreshes_reference(
         self, harness: Harness, later: datetime
     ) -> None:
-        harness.source.items = [FakeMedia(A, b"hello", modified_at=later)]
+        harness.source.items = [FakeMedia(A, b"hello", modified_at=later - AGED)]
 
         report = harness.service.run_once()
 
@@ -167,7 +168,7 @@ class TestGivenRegisteredItem:
         record = harness.registry.get(VERSION)
         assert record is not None
         (reference,) = record.sources
-        assert reference.modified_at == later
+        assert reference.modified_at == later - AGED
         assert reference.seen_at == later
 
     def test_when_only_entitlements_change_then_refreshes_without_hashing(
@@ -213,7 +214,7 @@ class TestGivenRegisteredItem:
     def test_when_bytes_change_then_supersedes_old_version(
         self, harness: Harness, later: datetime
     ) -> None:
-        harness.source.items = [FakeMedia(A, b"changed", modified_at=later)]
+        harness.source.items = [FakeMedia(A, b"changed", modified_at=later - AGED)]
 
         report = harness.service.run_once()
 
@@ -314,13 +315,14 @@ class TestGivenCrashedPass:
         harness = make_harness(ITEM)
         harness.service.run_once()
         later = harness.clock.tick()
+        changed_at = later - AGED
         stranded = models.AssetVersion(
             version=self.NEW,
             media_type="video/mp4",
             size_bytes=7,
             sources=(
                 models.SourceReference(
-                    "local", A, f"fake:///{A}/clip.mp4", "clip.mp4", 7, later, PUBLIC, later
+                    "local", A, f"fake:///{A}/clip.mp4", "clip.mp4", 7, changed_at, PUBLIC, later
                 ),
             ),
             first_seen_at=later,
@@ -328,7 +330,7 @@ class TestGivenCrashedPass:
         )
         assert harness.registry.register_version(stranded)
         assert len(harness.registry.list_by_source("local")) == 2
-        harness.source.items = [FakeMedia(A, b"changed", modified_at=later)]
+        harness.source.items = [FakeMedia(A, b"changed", modified_at=changed_at)]
         harness.writer.commands.clear()
         return harness
 
@@ -340,6 +342,7 @@ class TestGivenCrashedPass:
         old_record = harness.registry.get(VERSION)
         assert old_record is not None and old_record.retired_at == harness.clock.current
         assert harness.writer.commands == [
+            ("register_version", self.NEW),
             ("add_source_reference", self.NEW, A),
             ("remove_source_reference", VERSION, A),
         ]
@@ -367,10 +370,81 @@ class TestGivenRetiredVersion:
         assert record.is_live
 
 
+class TestGivenYoungItem:
+    """Items modified less than `min_age_seconds` before the pass: still being copied, maybe."""
+
+    def test_when_new_then_deferred_and_nothing_written(self) -> None:
+        harness = make_harness(FakeMedia(A, b"hello", modified_at=T0))
+
+        report = harness.service.run_once()
+
+        assert report == IngestionReport(deferred=1)
+        assert harness.writer.commands == []
+
+    def test_when_registered_item_changed_then_old_reference_kept(self) -> None:
+        harness = make_harness(ITEM)
+        harness.service.run_once()
+        later = harness.clock.tick()
+        harness.source.items = [FakeMedia(A, b"changed", modified_at=later)]
+        harness.writer.commands.clear()
+
+        report = harness.service.run_once()
+
+        assert report == IngestionReport(deferred=1)
+        assert harness.writer.commands == []
+        assert [r.version for r in harness.registry.list_by_source("local")] == [VERSION]
+
+    def test_when_aged_then_next_pass_registers_it(self) -> None:
+        harness = make_harness(FakeMedia(A, b"hello", modified_at=T0))
+        harness.service.run_once()
+        harness.clock.tick()
+
+        report = harness.service.run_once()
+
+        assert report == IngestionReport(registered=1)
+        assert harness.registry.get(VERSION) is not None
+
+
+class TestGivenChangingItem:
+    """Items whose size or modification time move while they are hashed."""
+
+    def test_when_grown_after_hashing_then_deferred(self) -> None:
+        item = FakeMedia(A, b"hello", refreshed=FakeMedia(A, b"hello world"))
+        harness = make_harness(item)
+
+        report = harness.service.run_once()
+
+        assert report == IngestionReport(deferred=1)
+        assert harness.registry.get(VERSION) is None
+
+    def test_when_touched_after_hashing_then_deferred(self) -> None:
+        item = FakeMedia(A, b"hello", refreshed=FakeMedia(A, b"hello", modified_at=T0))
+        harness = make_harness(item)
+
+        report = harness.service.run_once()
+
+        assert report == IngestionReport(deferred=1)
+
+    def test_when_stream_longer_than_listed_then_deferred(self) -> None:
+        harness = make_harness(FakeMedia(A, b"hello", declared_size=3))
+
+        report = harness.service.run_once()
+
+        assert report == IngestionReport(deferred=1)
+        assert harness.writer.commands == []
+
+    def test_when_refresh_fails_then_counts_failure(self) -> None:
+        harness = make_harness(FakeMedia(A, b"hello", fail_refresh=True))
+
+        report = harness.service.run_once()
+
+        assert report == IngestionReport(failed=1)
+
+
 class TestGivenReport:
     """The pass counters."""
 
     def test_when_rendered_then_key_value_pairs(self) -> None:
         assert str(IngestionReport(registered=2, failed=1)) == (
-            "registered=2 unchanged=0 superseded=0 retired=0 quarantined=0 failed=1"
+            "registered=2 unchanged=0 superseded=0 retired=0 quarantined=0 deferred=0 failed=1"
         )

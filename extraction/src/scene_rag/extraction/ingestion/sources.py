@@ -3,12 +3,14 @@
 import dataclasses
 import hashlib
 import logging
+import stat
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
 from scene_rag.extraction.ingestion.config import IngestionConfig
+from scene_rag.extraction.ingestion.models import truncate_to_millisecond
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +35,7 @@ def to_millisecond_utc(timestamp: float) -> datetime:
     The registry stores BSON dates, which hold milliseconds; truncating before comparing
     keeps a round-tripped ``modified_at`` equal to a fresh listing's.
     """
-    moment = datetime.fromtimestamp(timestamp, UTC)
-    return moment.replace(microsecond=moment.microsecond // 1000 * 1000)
+    return truncate_to_millisecond(datetime.fromtimestamp(timestamp, UTC))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -64,6 +65,17 @@ class FilesystemMedia:
     def open(self) -> BinaryIO:
         """Open the file for binary reading."""
         return self.path.open("rb")
+
+    def refresh(self) -> FilesystemMedia:
+        """Return the item with the size and modification time the file has now.
+
+        Raises:
+            OSError: When the file is gone or cannot be inspected.
+        """
+        status = self.path.stat()
+        return dataclasses.replace(
+            self, size_bytes=status.st_size, modified_at=to_millisecond_utc(status.st_mtime)
+        )
 
 
 class FilesystemMediaSource:
@@ -118,11 +130,11 @@ class FilesystemMediaSource:
             if media_type is None:
                 continue
             try:
-                if not path.is_file():
-                    continue
                 status = path.stat()
             except OSError as exc:
                 logger.warning("skipped %s: %s", path, exc)
+                continue
+            if not stat.S_ISREG(status.st_mode):
                 continue
             relative = path.relative_to(self._root).as_posix()
             yield FilesystemMedia(
