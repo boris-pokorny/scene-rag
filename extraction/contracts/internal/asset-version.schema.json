@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/extraction/internal/asset-version.schema.json",
+  "title": "AssetVersion",
+  "description": "One document of the Asset Registry (collection asset_versions): an immutable asset version identified by its content hash, with every source reference that currently holds it. Written only by the ingestion step; read by sibling steps and the scene-catalog role of the extraction service.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_id", "schema_version", "media_type", "size_bytes", "sources", "first_seen_at", "lineage", "retired_at"],
+  "properties": {
+    "_id": { "$ref": "#/$defs/version" },
+    "schema_version": { "const": 1 },
+    "media_type": { "type": "string", "pattern": "^[a-z]+/[A-Za-z0-9.+-]+$" },
+    "size_bytes": { "type": "integer", "minimum": 0 },
+    "sources": {
+      "description": "Source references currently holding these bytes. Empty once every source retired its copy.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/source_reference" }
+    },
+    "first_seen_at": { "$ref": "#/$defs/datetime" },
+    "lineage": { "$ref": "#/$defs/lineage" },
+    "retired_at": {
+      "description": "Tombstone: set when the last source reference was removed; null while live.",
+      "oneOf": [{ "$ref": "#/$defs/datetime" }, { "type": "null" }]
+    }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash of the asset bytes: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "datetime": {
+      "description": "UTC timestamp. Stored as a BSON date; rendered as RFC 3339 in JSON samples.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "asset_id", "uri", "filename", "size_bytes", "modified_at", "entitlements", "seen_at"],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "asset_id": { "type": "string", "pattern": "^asset-[0-9a-f]{16}$" },
+        "uri": { "type": "string", "format": "uri" },
+        "filename": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "modified_at": { "$ref": "#/$defs/datetime" },
+        "entitlements": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "seen_at": { "$ref": "#/$defs/datetime" }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "fingerprint", "inputs", "version", "image"],
+      "properties": {
+        "step": { "const": "ingestion" },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{12}$" },
+        "inputs": { "type": "array", "items": { "type": "string" }, "maxItems": 0 },
+        "version": { "$ref": "#/$defs/version" },
+        "image": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+      }
+    }
+  }
+}
