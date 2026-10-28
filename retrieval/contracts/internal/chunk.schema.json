@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/internal/chunk.schema.json",
+  "title": "Chunk",
+  "description": "One document of the Chunk Store (collection chunks): one retrieval unit cut from the scene records of one scene set under one chunking fingerprint. Written only by the chunking step; read by the embedding step and the query-api role of the retrieval service. Carries what every retrieved source needs: asset version, scene indices, time span, entitlements, source ids and lineage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_id", "schema_version", "scene_set_version", "asset_version", "segmentation_fingerprint",
+    "chunk_index", "scene_indices", "start_seconds", "end_seconds", "text", "sources",
+    "entitlements", "classifications", "keyframes", "enrichments", "created_at", "lineage"
+  ],
+  "properties": {
+    "_id": {
+      "description": "Data version of the chunk: hash(sorted scene record versions + fingerprint + chunk index).",
+      "$ref": "#/$defs/version"
+    },
+    "schema_version": { "const": 1 },
+    "scene_set_version": {
+      "description": "Data version of the scene set the chunk was cut from (as scene-api publishes it).",
+      "$ref": "#/$defs/version"
+    },
+    "asset_version": {
+      "description": "Content hash of the asset version, denormalised for liveness and purge queries.",
+      "$ref": "#/$defs/version"
+    },
+    "segmentation_fingerprint": { "$ref": "#/$defs/fingerprint" },
+    "chunk_index": {
+      "description": "Position among the chunks of the scene set under this fingerprint.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "scene_indices": {
+      "description": "Scenes the chunk covers, ascending; at least one.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": 0 },
+      "uniqueItems": true
+    },
+    "start_seconds": { "type": "number", "minimum": 0 },
+    "end_seconds": { "type": "number", "minimum": 0 },
+    "text": {
+      "description": "The retrieval text.",
+      "type": "string",
+      "minLength": 1
+    },
+    "sources": {
+      "description": "Source references holding the asset version, for citations.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "asset_id", "filename"],
+        "properties": {
+          "source_id": { "type": "string", "minLength": 1 },
+          "asset_id": { "type": "string", "minLength": 1 },
+          "filename": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "entitlements": {
+      "description": "Who may see the chunk: the asset version's entitlements, sorted.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "classifications": {
+      "description": "Distinct data classifications of the text that went in, sorted.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "keyframes": {
+      "description": "Keyframes of the covered scenes, in stream order; their bytes are served by scene-api under the digest.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["digest", "seconds"],
+        "properties": {
+          "digest": { "$ref": "#/$defs/version" },
+          "seconds": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "enrichments": {
+      "description": "The enrichment records whose text went in.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enricher", "fingerprint", "version"],
+        "properties": {
+          "enricher": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "fingerprint": { "$ref": "#/$defs/fingerprint" },
+          "version": { "$ref": "#/$defs/version" }
+        }
+      }
+    },
+    "created_at": { "$ref": "#/$defs/datetime" },
+    "lineage": { "$ref": "#/$defs/lineage" }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "fingerprint": {
+      "description": "Step fingerprint: twelve hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "datetime": {
+      "description": "UTC timestamp. Stored as a BSON date; rendered as RFC 3339 in JSON samples.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "fingerprint", "inputs", "version", "image"],
+      "properties": {
+        "step": { "const": "chunking" },
+        "fingerprint": {
+          "description": "Fingerprint of the step: its hyperparameters (upstream pins included) and output-defining code.",
+          "$ref": "#/$defs/fingerprint"
+        },
+        "inputs": {
+          "description": "Data versions read: the scene records the chunk covers.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^scene-record:[a-z0-9_]+:[0-9a-f]+$" }
+        },
+        "version": { "$ref": "#/$defs/version" },
+        "image": {
+          "description": "Digest of the service image, when known.",
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

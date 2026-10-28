@@ -1,0 +1,22 @@
+{
+  "version": "sha256:37c9ff2cbfb0890ef9c3f4963b1dbcb109d2f8f65a50db3a043cee8c76cbe7e1",
+  "asset_version": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "segmentation_fingerprint": "3b9e1f6a2c40",
+  "scene_count": 2,
+  "created_at": "2026-10-27T10:00:00Z",
+  "live": true,
+  "enrichments": [
+    {
+      "enricher": "description",
+      "fingerprint": "3b9e1f6a2c40",
+      "scene_count": 2,
+      "complete": true
+    },
+    {
+      "enricher": "transcript",
+      "fingerprint": "e41a9c27b0d5",
+      "scene_count": 1,
+      "complete": false
+    }
+  ]
+}

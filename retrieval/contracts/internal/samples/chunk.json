@@ -1,0 +1,60 @@
+{
+  "_id": "sha256:64f3b60b58b44931830fa7117d30d63fd260c920e6f1bb9a535281bb4c5d9ee8",
+  "schema_version": 1,
+  "scene_set_version": "sha256:37c9ff2cbfb0890ef9c3f4963b1dbcb109d2f8f65a50db3a043cee8c76cbe7e1",
+  "asset_version": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "segmentation_fingerprint": "3b9e1f6a2c40",
+  "chunk_index": 0,
+  "scene_indices": [
+    0
+  ],
+  "start_seconds": 0.0,
+  "end_seconds": 13.347,
+  "text": "Welcome back. Today we look at how the pipeline cuts a video into scenes. Each scene gets its keyframes and an audio clip of its own.",
+  "sources": [
+    {
+      "source_id": "local",
+      "asset_id": "asset-3fa85f64d1a2b3c4",
+      "filename": "sample-30s.mp4"
+    },
+    {
+      "source_id": "library",
+      "asset_id": "asset-0123456789abcdef",
+      "filename": "talk.mp4"
+    }
+  ],
+  "entitlements": [
+    "public",
+    "team-platform"
+  ],
+  "classifications": [
+    "internal"
+  ],
+  "keyframes": [
+    {
+      "digest": "sha256:6ab9f1eb8f7d3388f4f9d586f66e99fd54080df2c446f0e58668b09c08a16dd0",
+      "seconds": 0.5005
+    },
+    {
+      "digest": "sha256:015f7e6bc5aeaf483724089e9252cc13b50951a6b69412522765cff4d780306e",
+      "seconds": 12.3457
+    }
+  ],
+  "enrichments": [
+    {
+      "enricher": "transcript",
+      "fingerprint": "e41a9c27b0d5",
+      "version": "sha256:4d1f0a7e2b9c8d3e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e"
+    }
+  ],
+  "created_at": "2026-10-28T12:00:00Z",
+  "lineage": {
+    "step": "chunking",
+    "fingerprint": "c7a1e2f3b4d5",
+    "inputs": [
+      "scene-record:sha256:63f3b42173c70a228702f3c7438d5a93db71290e34650639470adf4622f3c908"
+    ],
+    "version": "sha256:64f3b60b58b44931830fa7117d30d63fd260c920e6f1bb9a535281bb4c5d9ee8",
+    "image": null
+  }
+}

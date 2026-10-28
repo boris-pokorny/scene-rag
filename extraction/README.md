@@ -98,7 +98,8 @@ in `.env.example`.
 
 `compose.yaml` at the repository root wires a complete instance: `mongo` (the three stores),
 `ollama` plus a one-shot `ollama-pull` running the `pull-models` role, the `ingestion`,
-`segmentation` and `enrichment` workers polling in a loop, and `scene-api` on `localhost:8080`. MongoDB is also
+`segmentation` and `enrichment` workers polling in a loop, `scene-api` on `localhost:8080`, and the
+`retrieval` service's `chunking` worker reading it (see `../retrieval/README.md`). MongoDB is also
 published on `localhost:27017`, so `mongosh` and the `pdm run` flow above reach the same stores.
 Every service runs the one image `Dockerfile` builds (dependencies exported from `pdm.lock`,
 every extra installed, ffmpeg on the path); settings are explicit in the compose file, which does

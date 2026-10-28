@@ -1,6 +1,7 @@
-# A fully wired scene-rag extraction service: MongoDB for the three stores, Ollama for the
-# vision model, the three workers polling in a loop, and the scene-api role on
-# localhost:${SCENE_API_PORT:-8080}. Drop media into extraction/data/media/.
+# A fully wired scene-rag instance: MongoDB for the stores, Ollama for the vision model, the
+# three extraction workers polling in a loop, the scene-api role on
+# localhost:${SCENE_API_PORT:-8080}, and the retrieval service's chunking worker reading it.
+# Drop media into extraction/data/media/.
 #
 # The vision model is pulled by the image's own pull-models role, from the enrichment config.
 #
@@ -127,6 +128,25 @@ services:
       interval: 10s
       timeout: 3s
       retries: 6
+
+  # The retrieval service: a separate image and a separate database on the same MongoDB. It
+  # reaches Media data only through scene-api, never through the extraction collections.
+  chunking:
+    build: ./retrieval
+    image: scene-rag-retrieval
+    restart: unless-stopped
+    command: ["worker", "--step", "chunking"]
+    environment:
+      SCENE_RAG_RETRIEVAL_SCENE_API_URL: http://scene-api:8080
+      SCENE_RAG_RETRIEVAL_CHUNK_STORE_URI: mongodb://mongo:27017
+      SCENE_RAG_RETRIEVAL_CHUNK_STORE_DATABASE: scene_rag_retrieval
+      SCENE_RAG_RETRIEVAL_POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
+      SCENE_RAG_RETRIEVAL_CHUNKING_WORKERS: ${CHUNKING_WORKERS:-1}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      scene-api:
+        condition: service_healthy
 
 volumes:
   mongo-data:
