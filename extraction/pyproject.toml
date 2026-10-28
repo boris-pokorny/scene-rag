@@ -57,6 +57,7 @@ test = "pytest --cov"
 test-integration = "pytest -m integration --no-cov"
 worker = "python -m scene_rag.extraction worker"
 scene-api = "python -m scene_rag.extraction scene-api"
+pull-models = "python -m scene_rag.extraction pull-models"
 openapi = "python -m scene_rag.extraction.scene_api.openapi"
 
 [tool.ruff]

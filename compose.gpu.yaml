@@ -1,0 +1,12 @@
+# Override for hosts with an NVIDIA GPU and the NVIDIA Container Toolkit installed:
+#   docker compose -f compose.yaml -f compose.gpu.yaml up --build -d
+# Only the Ollama server moves to the GPU; the speech model in enrichment stays on the CPU.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

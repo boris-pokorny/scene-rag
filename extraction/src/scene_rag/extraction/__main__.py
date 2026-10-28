@@ -1,7 +1,8 @@
 """Command line of the `extraction` service.
 
 Roles are subcommands registered in `ROLES`; steps of the worker role are registered in
-`STEPS`. Neither is selected by ``if``/``elif``.
+`STEPS`. Neither is selected by ``if``/``elif``. The ``pull-models`` role puts the enrichment
+step's vision model on the Ollama server, so a deployment never names the model itself.
 """
 
 import argparse
@@ -69,14 +70,30 @@ def _scene_api(args: argparse.Namespace) -> None:
     bootstrap.run_server()
 
 
+def _pull_models(args: argparse.Namespace) -> None:
+    # Imported on dispatch: the enrichment step's extra is needed only to run it.
+    try:
+        from scene_rag.extraction.enrichment import bootstrap
+    except ImportError as exc:
+        raise RuntimeError(
+            f"The pull-models role cannot be imported: {exc}. "
+            "Install the enrichment extra with `pdm install -G enrichment`."
+        ) from exc
+    bootstrap.pull_models()
+
+
 ROLES: Final[Mapping[str, RoleRunner]] = {
     "worker": _worker,
     "scene-api": _scene_api,
+    "pull-models": _pull_models,
 }
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser: ``worker --step <step> [--once]`` or ``scene-api``."""
+    """Build the argument parser.
+
+    Subcommands: ``worker --step <step> [--once]``, ``scene-api`` and ``pull-models``.
+    """
     parser = argparse.ArgumentParser(prog="scene-rag-extraction")
     roles = parser.add_subparsers(dest="role", required=True)
     worker = roles.add_parser("worker", help="run one step's worker loop")
@@ -84,6 +101,10 @@ def build_parser() -> argparse.ArgumentParser:
     worker.add_argument("--once", action="store_true", help="run a single pass and exit")
     roles.add_parser(
         "scene-api", help="serve the scene records over HTTP; settings from the environment"
+    )
+    roles.add_parser(
+        "pull-models",
+        help="pull the enrichment step's vision model into the Ollama server, then exit",
     )
     return parser
 

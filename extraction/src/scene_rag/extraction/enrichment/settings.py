@@ -38,6 +38,32 @@ def redact_uri(uri: str) -> str:
 
 
 @dataclasses.dataclass(frozen=True)
+class OllamaSettings:
+    """Where the Ollama server is; the part of the settings the ``pull-models`` role needs.
+
+    Attributes:
+        url: Base URL of the server answering the vision model.
+        timeout_seconds: Longest wait for one answer; CPU inference takes minutes per scene.
+    """
+
+    url: str = DEFAULT_OLLAMA_URL
+    timeout_seconds: float = DEFAULT_OLLAMA_TIMEOUT_SECONDS
+
+    def __post_init__(self) -> None:
+        """Validate the values.
+
+        Raises:
+            ValueError: When the URL is empty or not HTTP, or the timeout is not positive.
+        """
+        if not self.url:
+            raise ValueError("ollama_url must not be empty")
+        if not self.url.startswith(("http://", "https://")):
+            raise ValueError("ollama_url must be an http(s) URL")
+        if not (math.isfinite(self.timeout_seconds) and self.timeout_seconds > 0):
+            raise ValueError("ollama_timeout_seconds must be a positive finite number")
+
+
+@dataclasses.dataclass(frozen=True)
 class EnrichmentSettings:
     """Deployment-specific values of the enrichment step.
 
@@ -76,6 +102,11 @@ class EnrichmentSettings:
     workers: int = 1
 
     @property
+    def ollama(self) -> OllamaSettings:
+        """Return the Ollama server settings on their own."""
+        return OllamaSettings(self.ollama_url, self.ollama_timeout_seconds)
+
+    @property
     def redacted_registry_uri(self) -> str:
         """Return `registry_uri` without credentials; the only form that may be logged."""
         return redact_uri(self.registry_uri)
@@ -103,15 +134,10 @@ class EnrichmentSettings:
             "scene_store_database",
             "enrichment_store_uri",
             "enrichment_store_database",
-            "ollama_url",
         ):
             if not getattr(self, name):
                 raise ValueError(f"{name} must not be empty")
-        if not self.ollama_url.startswith(("http://", "https://")):
-            raise ValueError("ollama_url must be an http(s) URL")
-        timeout = self.ollama_timeout_seconds
-        if not (math.isfinite(timeout) and timeout > 0):
-            raise ValueError("ollama_timeout_seconds must be a positive finite number")
+        self.ollama  # validates the Ollama values  # noqa: B018
         if self.whisper_cpu_threads < 0:
             raise ValueError("whisper_cpu_threads must not be negative")
         interval = self.poll_interval_seconds

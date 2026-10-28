@@ -13,7 +13,9 @@ and the `scene-api` role. Implemented so far:
   record per scene, enricher and fingerprint to the Enrichment Store;
 - **role `scene-api`**: serve scene records (a scene with its enrichments, asset entitlements and
   derivative references) over HTTP/JSON to the `retrieval` service, the only way another service
-  reads Media data.
+  reads Media data;
+- **role `pull-models`**: put the vision model `EnrichmentConfig` names on the Ollama server
+  and exit, so a deployment never names the model itself.
 
 ## Setup
 
@@ -39,8 +41,11 @@ in-process and is downloaded on first use into the Hugging Face cache (or
 
 ```sh
 docker run -d --name scene-rag-ollama -p 11434:11434 -v scene-rag-ollama:/root/.ollama docker.io/ollama/ollama
-docker exec scene-rag-ollama ollama pull qwen2.5vl:3b
+pdm run pull-models                         # pulls the model EnrichmentConfig names; a no-op once it is there
 ```
+
+Or skip the two containers and the `.env`: [Run with Docker Compose](#run-with-docker-compose)
+brings up MongoDB, Ollama, the three workers and `scene-api` together.
 
 ## Run
 
@@ -58,6 +63,7 @@ pdm run worker --step segmentation --once     # cuts what ingestion registered
 pdm run worker --step enrichment --once       # describes and transcribes what segmentation cut
 pdm run worker --step ingestion               # poll every SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS
 pdm run scene-api                             # serve the scene records on SCENE_RAG_EXTRACTION_SCENE_API_HOST:PORT
+pdm run pull-models                           # pull the vision model into SCENE_RAG_EXTRACTION_OLLAMA_URL, then exit
 ```
 
 Every variable not marked optional is required by the step that reads it; a missing one ends the process with a message naming it. Sample values for a local run are
@@ -79,7 +85,7 @@ in `.env.example`.
 | `SCENE_RAG_EXTRACTION_AUDIO_CLIP_WORKERS` | ffmpeg processes slicing the audio clips of one version at once; `1` by default, `4` is a measured sweet spot. Up to workers × clip workers ffmpeg processes run at once. | segmentation (optional) |
 | `SCENE_RAG_EXTRACTION_ENRICHMENT_STORE_URI` | MongoDB connection string of the Enrichment Store. | enrichment, scene-api |
 | `SCENE_RAG_EXTRACTION_ENRICHMENT_STORE_DATABASE` | Database holding the enrichment collection. | enrichment, scene-api |
-| `SCENE_RAG_EXTRACTION_OLLAMA_URL` | Base URL of the Ollama server answering the vision model; `http://localhost:11434` by default. | enrichment (optional) |
+| `SCENE_RAG_EXTRACTION_OLLAMA_URL` | Base URL of the Ollama server answering the vision model; `http://localhost:11434` by default. | enrichment, pull-models (optional) |
 | `SCENE_RAG_EXTRACTION_OLLAMA_TIMEOUT_SECONDS` | Longest wait for one vision answer; `600` by default, since CPU inference takes minutes per scene. | enrichment (optional) |
 | `SCENE_RAG_EXTRACTION_WHISPER_CACHE_DIR` | Directory the speech model is downloaded to and loaded from; the Hugging Face cache by default. | enrichment (optional) |
 | `SCENE_RAG_EXTRACTION_WHISPER_CPU_THREADS` | Threads the speech model computes on; `0` (the library's choice) by default. | enrichment (optional) |
@@ -87,6 +93,38 @@ in `.env.example`.
 | `SCENE_RAG_EXTRACTION_SCENE_API_HOST` | Interface the API listens on; `127.0.0.1` by default. | scene-api (optional) |
 | `SCENE_RAG_EXTRACTION_SCENE_API_PORT` | Port the API listens on; `8080` by default. | scene-api (optional) |
 | `SCENE_RAG_EXTRACTION_SCENE_API_PAGE_SIZE` | Items a page holds when a request names no `limit`, and the most it may ask for; `100` by default. | scene-api (optional) |
+
+### Run with Docker Compose
+
+`compose.yaml` at the repository root wires a complete instance: `mongo` (the three stores),
+`ollama` plus a one-shot `ollama-pull` running the `pull-models` role, the `ingestion`,
+`segmentation` and `enrichment` workers polling in a loop, and `scene-api` on `localhost:8080`. MongoDB is also
+published on `localhost:27017`, so `mongosh` and the `pdm run` flow above reach the same stores.
+Every service runs the one image `Dockerfile` builds (dependencies exported from `pdm.lock`,
+every extra installed, ffmpeg on the path); settings are explicit in the compose file, which does
+not read `.env`.
+
+```sh
+cd ..                                         # the repository root
+cp some-video.mp4 extraction/data/media/      # the workers poll this directory
+docker compose up --build -d                  # first start pulls the vision model (~3 GB) and the speech model
+docker compose -f compose.yaml -f compose.gpu.yaml up --build -d   # same, with Ollama on an NVIDIA GPU (needs the NVIDIA Container Toolkit)
+docker compose logs -f segmentation enrichment
+curl -s localhost:8080/health
+sh extraction/examples/scene_api_walkthrough.sh
+docker compose run --rm ingestion worker --step ingestion --once   # one pass of a step instead of the loop
+docker compose down                           # `-v` also drops the stores, derivatives and model caches
+```
+
+The media directory is mounted read-only (with the `z` option, so SELinux hosts relabel it for
+containers) at `/data/media` in ingestion and segmentation, and the
+`derivatives` volume at `/data/derivatives` in segmentation, enrichment and scene-api: scene sets
+reference `file://` URIs, so the paths must agree across containers. Shell variables (or a `.env`
+next to `compose.yaml`) override the defaults: `SCENE_API_PORT` (8080), `MONGO_PORT` (27017),
+`POLL_INTERVAL_SECONDS` (30), `SOURCE_ID` (local), `SOURCE_ENTITLEMENTS` (public),
+`SEGMENTATION_WORKERS` (1), `AUDIO_CLIP_WORKERS` (4), `ENRICHMENT_WORKERS` (1) and
+`SCENE_API_PAGE_SIZE` (100). The vision model is named only in `EnrichmentConfig`: `ollama-pull`
+reads it from there, so a model change is one pull request and the next `up` pulls the new one.
 
 ### Ingestion
 
@@ -162,7 +200,8 @@ modules (`models.py`, `fingerprint.py`, the enricher and its backend) and its mo
 (`ollama_transport.py`) and the model loader (`whisper_loader.py`) sit outside it, so changing
 the prompt reruns the descriptions and nothing else, and an error message or cache path
 changes nothing. An unreachable Ollama, a missing model or a speech model that cannot load ends
-the process at startup. Record schema: `contracts/internal/enrichment.schema.json`.
+the process at startup; the `pull-models` role (`ollama_pull.py`, outside the fingerprint) puts
+the configured vision model on the server beforehand. Record schema: `contracts/internal/enrichment.schema.json`.
 
 ### Scene API
 

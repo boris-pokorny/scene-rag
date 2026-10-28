@@ -9,13 +9,13 @@ import pytest
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 
-from scene_rag.extraction.enrichment import bootstrap, settings, whisper_loader
+from scene_rag.extraction.enrichment import bootstrap, ollama_pull, settings, whisper_loader
 from scene_rag.extraction.enrichment.asset_registry import Document
-from scene_rag.extraction.enrichment.config import EnrichmentConfig
+from scene_rag.extraction.enrichment.config import DescriptionConfig, EnrichmentConfig
 from scene_rag.extraction.enrichment.dispatch import SerialDispatcher, ThreadDispatcher
 from scene_rag.extraction.enrichment.models import EnrichmentReport, ModelRef
 from scene_rag.extraction.enrichment.protocols import Dispatcher, Enricher
-from scene_rag.extraction.enrichment.settings import EnrichmentSettings
+from scene_rag.extraction.enrichment.settings import EnrichmentSettings, OllamaSettings
 from tests.support.enrichment_fakes import FakeEnricher, FakeTranscriber
 
 
@@ -72,11 +72,22 @@ class FakeStoreClient:
 
 
 class FakeTransport:
-    """JsonTransport answering a healthy server holding the vision model, or failing."""
+    """JsonTransport answering a healthy server holding the vision model, or failing.
 
-    def __init__(self, reachable: bool = True, models: Sequence[str] = ("qwen2.5vl:3b",)) -> None:
+    A pull adds the model to the server's list and is recorded, unless ``pull_status`` says
+    the server answered something else.
+    """
+
+    def __init__(
+        self,
+        reachable: bool = True,
+        models: Sequence[str] = ("qwen2.5vl:3b",),
+        pull_status: str = "success",
+    ) -> None:
         self.reachable = reachable
-        self.models = models
+        self.models = list(models)
+        self.pull_status = pull_status
+        self.pulls: list[tuple[dict[str, Any], float]] = []
 
     def get(self, url: str, timeout: float) -> dict[str, Any]:
         if not self.reachable:
@@ -88,6 +99,11 @@ class FakeTransport:
         return {"models": [{"name": m, "model": m, "digest": "ab" * 32} for m in self.models]}
 
     def post(self, url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+        if url.endswith("/api/pull"):
+            self.pulls.append((payload, timeout))
+            if self.pull_status == "success":
+                self.models.append(str(payload["model"]))
+            return {"status": self.pull_status}
         return {"message": {"content": "A talk."}}
 
 
@@ -280,6 +296,68 @@ class TestGivenModels:
             bootstrap.create_enrichers(loaded, transport=FakeTransport(models=("llama3.2:latest",)))
 
         assert speech == []
+
+
+class TestGivenPullModels:
+    """The ``pull-models`` role over a fake Ollama transport; the Mongo variables are not read."""
+
+    @pytest.fixture
+    def environment(self) -> dict[str, str]:
+        return {settings.OLLAMA_URL_ENV: "http://ollama:11434"}
+
+    def test_when_model_missing_then_pulled_by_config_name_and_resolved(
+        self, environment: dict[str, str]
+    ) -> None:
+        transport = FakeTransport(models=("llama3.2:latest",))
+
+        bootstrap.pull_models(environ=environment, transport=transport)
+
+        assert transport.pulls == [
+            ({"model": "qwen2.5vl:3b", "stream": False}, ollama_pull.PULL_TIMEOUT_SECONDS)
+        ]
+        assert "qwen2.5vl:3b" in transport.models
+
+    def test_when_model_present_then_nothing_pulled(self, environment: dict[str, str]) -> None:
+        transport = FakeTransport()
+
+        bootstrap.pull_models(environ=environment, transport=transport)
+
+        assert transport.pulls == []
+
+    def test_when_config_names_another_model_then_that_one_pulled(
+        self, environment: dict[str, str]
+    ) -> None:
+        transport = FakeTransport(models=())
+        config = EnrichmentConfig(description=DescriptionConfig(model="llava:7b"))
+
+        bootstrap.pull_models(environ=environment, config=config, transport=transport)
+
+        assert [payload["model"] for payload, _ in transport.pulls] == ["llava:7b"]
+
+    def test_when_pull_does_not_succeed_then_runtime_error(
+        self, environment: dict[str, str]
+    ) -> None:
+        transport = FakeTransport(models=(), pull_status="pulling manifest")
+
+        with pytest.raises(RuntimeError, match="'pulling manifest'"):
+            bootstrap.pull_models(environ=environment, transport=transport)
+
+    def test_when_ollama_unreachable_then_runtime_error_names_variable(
+        self, environment: dict[str, str]
+    ) -> None:
+        with pytest.raises(RuntimeError, match=settings.OLLAMA_URL_ENV):
+            bootstrap.pull_models(environ=environment, transport=FakeTransport(reachable=False))
+
+    def test_when_timeout_invalid_then_runtime_error(self) -> None:
+        with pytest.raises(RuntimeError, match=settings.OLLAMA_TIMEOUT_SECONDS_ENV):
+            bootstrap.pull_models(
+                environ={settings.OLLAMA_TIMEOUT_SECONDS_ENV: "soon"}, transport=FakeTransport()
+            )
+
+    def test_when_variables_absent_then_defaults(self) -> None:
+        loaded = bootstrap.load_ollama_settings({})
+
+        assert loaded == OllamaSettings("http://localhost:11434", 600.0)
 
 
 class TestGivenWorkerLoop:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scene_rag.extraction.enrichment.settings import EnrichmentSettings, redact_uri
+from scene_rag.extraction.enrichment.settings import EnrichmentSettings, OllamaSettings, redact_uri
 
 
 def make_settings(**overrides: object) -> EnrichmentSettings:
@@ -40,6 +40,9 @@ class TestGivenSettings:
         assert settings.redacted_scene_store_uri == "mongodb://scenes:27017"
         assert settings.redacted_enrichment_store_uri == "mongodb://enrichments:27017"
         assert redact_uri("http://u:p@h/x") == "http://***@h/x"
+
+    def test_when_ollama_part_taken_then_same_values(self) -> None:
+        assert make_settings().ollama == OllamaSettings("http://localhost:11434", 600.0)
 
     def test_when_cache_dir_given_then_kept(self) -> None:
         assert make_settings(whisper_cache_dir=Path("/models")).whisper_cache_dir == Path("/models")

@@ -20,7 +20,7 @@ class TestGivenCommandLine:
         assert sorted(cli.STEPS) == ["enrichment", "ingestion", "segmentation"]
 
     def test_when_roles_listed_then_every_role_registered(self) -> None:
-        assert sorted(cli.ROLES) == ["scene-api", "worker"]
+        assert sorted(cli.ROLES) == ["pull-models", "scene-api", "worker"]
 
     def test_when_scene_api_role_given_then_dispatched(
         self, monkeypatch: pytest.MonkeyPatch
@@ -31,9 +31,19 @@ class TestGivenCommandLine:
         assert cli.main(["scene-api"]) == 0
         assert calls == ["scene-api"]
 
-    def test_when_scene_api_given_worker_options_then_rejected(self) -> None:
+    @pytest.mark.parametrize("role", ["scene-api", "pull-models"])
+    def test_when_role_given_worker_options_then_rejected(self, role: str) -> None:
         with pytest.raises(SystemExit):
-            cli.build_parser().parse_args(["scene-api", "--once"])
+            cli.build_parser().parse_args([role, "--once"])
+
+    def test_when_pull_models_role_given_then_dispatched(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[str] = []
+        monkeypatch.setitem(cli.ROLES, "pull-models", lambda args: calls.append(args.role))
+
+        assert cli.main(["pull-models"]) == 0
+        assert calls == ["pull-models"]
 
     def test_when_role_missing_then_rejected(self) -> None:
         with pytest.raises(SystemExit):
@@ -96,12 +106,16 @@ class TestGivenStepExtras:
         with pytest.raises(RuntimeError, match=f"pdm install -G {step}"):
             cli.STEPS[step](once=True)
 
+    @pytest.mark.parametrize(
+        ("role", "package", "extra"),
+        [("scene-api", "scene_api", "scene-api"), ("pull-models", "enrichment", "enrichment")],
+    )
     def test_when_role_extra_missing_then_configuration_error(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, role: str, package: str, extra: str
     ) -> None:
-        package = importlib.import_module("scene_rag.extraction.scene_api")
-        monkeypatch.setitem(sys.modules, "scene_rag.extraction.scene_api.bootstrap", None)
-        monkeypatch.delattr(package, "bootstrap", raising=False)
+        module = importlib.import_module(f"scene_rag.extraction.{package}")
+        monkeypatch.setitem(sys.modules, f"scene_rag.extraction.{package}.bootstrap", None)
+        monkeypatch.delattr(module, "bootstrap", raising=False)
 
-        with pytest.raises(RuntimeError, match="pdm install -G scene-api"):
-            cli.ROLES["scene-api"](cli.build_parser().parse_args(["scene-api"]))
+        with pytest.raises(RuntimeError, match=f"pdm install -G {extra}"):
+            cli.ROLES[role](cli.build_parser().parse_args([role]))

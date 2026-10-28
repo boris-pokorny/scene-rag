@@ -18,8 +18,8 @@ from typing import Final
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
+from scene_rag.extraction.enrichment import ollama_pull, whisper_loader
 from scene_rag.extraction.enrichment import settings as settings_module
-from scene_rag.extraction.enrichment import whisper_loader
 from scene_rag.extraction.enrichment.asset_registry import Document, MongoAssetVersionReader
 from scene_rag.extraction.enrichment.config import EnrichmentConfig
 from scene_rag.extraction.enrichment.derivative_reader import FileDerivativeReader
@@ -43,7 +43,7 @@ from scene_rag.extraction.enrichment.protocols import (
 from scene_rag.extraction.enrichment.scene_store import MongoSceneSetReader
 from scene_rag.extraction.enrichment.scheduler import Scheduler
 from scene_rag.extraction.enrichment.service import EnrichmentService
-from scene_rag.extraction.enrichment.settings import EnrichmentSettings
+from scene_rag.extraction.enrichment.settings import EnrichmentSettings, OllamaSettings
 from scene_rag.extraction.enrichment.transcription import TranscriptionEnricher
 
 logger = logging.getLogger(__name__)
@@ -105,6 +105,28 @@ def _count(environ: Mapping[str, str], name: str, *, minimum: int) -> int | None
     return count
 
 
+def load_ollama_settings(environ: Mapping[str, str] | None = None) -> OllamaSettings:
+    """Bind `OllamaSettings` from the environment; both variables have defaults.
+
+    Args:
+        environ: Variables to read; the process environment by default.
+
+    Raises:
+        RuntimeError: When a value does not validate.
+    """
+    env = os.environ if environ is None else environ
+    try:
+        timeout = _number(env, settings_module.OLLAMA_TIMEOUT_SECONDS_ENV)
+        return OllamaSettings(
+            url=env.get(settings_module.OLLAMA_URL_ENV) or settings_module.DEFAULT_OLLAMA_URL,
+            timeout_seconds=(
+                settings_module.DEFAULT_OLLAMA_TIMEOUT_SECONDS if timeout is None else timeout
+            ),
+        )
+    except ValueError as exc:
+        raise RuntimeError(f"invalid settings: {exc}") from exc
+
+
 def load_settings(environ: Mapping[str, str] | None = None) -> EnrichmentSettings:
     """Bind `EnrichmentSettings` from the environment.
 
@@ -123,8 +145,8 @@ def load_settings(environ: Mapping[str, str] | None = None) -> EnrichmentSetting
     """
     env = os.environ if environ is None else environ
     mongo_hint = "Start MongoDB and point this at it, e.g. mongodb://localhost:27017."
+    ollama = load_ollama_settings(env)
     try:
-        timeout = _number(env, settings_module.OLLAMA_TIMEOUT_SECONDS_ENV)
         poll_interval = _number(env, settings_module.POLL_INTERVAL_SECONDS_ENV)
         threads = _count(env, settings_module.WHISPER_CPU_THREADS_ENV, minimum=0)
         workers = _count(env, settings_module.WORKERS_ENV, minimum=1)
@@ -146,11 +168,8 @@ def load_settings(environ: Mapping[str, str] | None = None) -> EnrichmentSetting
                 settings_module.ENRICHMENT_STORE_DATABASE_ENV,
                 "Name the enrichment store database.",
             ),
-            ollama_url=env.get(settings_module.OLLAMA_URL_ENV)
-            or settings_module.DEFAULT_OLLAMA_URL,
-            ollama_timeout_seconds=(
-                settings_module.DEFAULT_OLLAMA_TIMEOUT_SECONDS if timeout is None else timeout
-            ),
+            ollama_url=ollama.url,
+            ollama_timeout_seconds=ollama.timeout_seconds,
             whisper_cache_dir=None if not cache_dir else Path(cache_dir).resolve(),
             whisper_cpu_threads=0 if threads is None else threads,
             poll_interval_seconds=poll_interval,
@@ -193,7 +212,7 @@ def connect_mongo(
 
 
 def connect_ollama(
-    settings: EnrichmentSettings, transport: JsonTransport | None = None
+    settings: OllamaSettings, transport: JsonTransport | None = None
 ) -> OllamaClient:
     """Build the Ollama client and check that the server answers, before any scene is attempted.
 
@@ -205,20 +224,60 @@ def connect_ollama(
         RuntimeError: When the server does not answer; every scene would fail otherwise.
     """
     client = OllamaClient(
-        settings.ollama_url,
+        settings.url,
         UrllibTransport() if transport is None else transport,
-        settings.ollama_timeout_seconds,
+        settings.timeout_seconds,
     )
     try:
         version = client.version()
     except OllamaError as exc:
         raise RuntimeError(
-            f"Ollama is not reachable at {settings.ollama_url}: {exc}. Start it (e.g. "
+            f"Ollama is not reachable at {settings.url}: {exc}. Start it (e.g. "
             "`docker run -d -p 11434:11434 docker.io/ollama/ollama`) or point "
             f"{settings_module.OLLAMA_URL_ENV} at it."
         ) from exc
-    logger.info("connected to Ollama %s at %s", version, settings.ollama_url)
+    logger.info("connected to Ollama %s at %s", version, settings.url)
     return client
+
+
+def pull_models(
+    *,
+    environ: Mapping[str, str] | None = None,
+    config: EnrichmentConfig | None = None,
+    transport: JsonTransport | None = None,
+) -> None:
+    """Entry point of the ``pull-models`` role: put the vision model on the Ollama server.
+
+    The model is the one `EnrichmentConfig` names, so a deployment pulls what the enrichment
+    worker will resolve, without naming it a second time. A model the server already holds is
+    not pulled again, so the role needs no network once the model is in place. The speech model
+    is not handled here: faster-whisper downloads it in-process on first use.
+
+    Args:
+        environ: Variables to read; the process environment by default.
+        config: Hyperparameters; the defaults when ``None``.
+        transport: HTTP layer for Ollama; the standard library outside tests.
+
+    Raises:
+        RuntimeError: When the settings do not validate, Ollama is unreachable or the pull
+            fails.
+    """
+    settings = load_ollama_settings(environ)
+    config = EnrichmentConfig() if config is None else config
+    name = config.description.model
+    ollama = connect_ollama(settings, transport)
+    try:
+        model = ollama.resolve_model(name)
+    except OllamaError:
+        logger.info("pulling %s into Ollama at %s", name, settings.url)
+        try:
+            ollama_pull.pull_model(
+                settings.url, name, UrllibTransport() if transport is None else transport
+            )
+            model = ollama.resolve_model(name)
+        except OllamaError as exc:
+            raise RuntimeError(str(exc)) from exc
+    logger.info("model %s is available as %s", model.name, model.digest)
 
 
 def make_dispatcher(workers: int, stack: contextlib.ExitStack, *, name: str) -> Dispatcher:
@@ -254,7 +313,7 @@ def create_enrichers(
             be loaded.
     """
     config = EnrichmentConfig() if config is None else config
-    ollama = connect_ollama(settings, transport)
+    ollama = connect_ollama(settings.ollama, transport)
     try:
         vision_model = ollama.resolve_model(config.description.model)
     except OllamaError as exc:

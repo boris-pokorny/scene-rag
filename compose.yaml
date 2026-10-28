@@ -1,0 +1,135 @@
+# A fully wired scene-rag extraction service: MongoDB for the three stores, Ollama for the
+# vision model, the three workers polling in a loop, and the scene-api role on
+# localhost:${SCENE_API_PORT:-8080}. Drop media into extraction/data/media/.
+#
+# The vision model is pulled by the image's own pull-models role, from the enrichment config.
+#
+# Paths inside file:// URIs cross containers: ingestion records /data/media/..., segmentation
+# reads it there and files derivatives under /data/derivatives, which enrichment and scene-api
+# read back. Every container therefore mounts those volumes at the same absolute path.
+#
+# extraction/.env is a `pdm run` feature and is not read here; every setting is explicit.
+# `${VAR:-default}` values can be overridden from the shell or a .env next to this file.
+#
+# Hosts with an NVIDIA GPU add the override: `docker compose -f compose.yaml -f compose.gpu.yaml up`.
+name: scene-rag
+
+x-extraction: &extraction
+  build: ./extraction
+  image: scene-rag-extraction
+  restart: unless-stopped
+  environment: &extraction-env
+    SCENE_RAG_EXTRACTION_REGISTRY_URI: mongodb://mongo:27017
+    SCENE_RAG_EXTRACTION_REGISTRY_DATABASE: scene_rag_extraction
+    SCENE_RAG_EXTRACTION_SCENE_STORE_URI: mongodb://mongo:27017
+    SCENE_RAG_EXTRACTION_SCENE_STORE_DATABASE: scene_rag_extraction
+    SCENE_RAG_EXTRACTION_ENRICHMENT_STORE_URI: mongodb://mongo:27017
+    SCENE_RAG_EXTRACTION_ENRICHMENT_STORE_DATABASE: scene_rag_extraction
+    SCENE_RAG_EXTRACTION_POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
+  depends_on:
+    mongo:
+      condition: service_healthy
+
+services:
+  mongo:
+    image: docker.io/mongo:8
+    # Only on localhost, for `mongosh` and the `pdm run` flow of extraction/README.md.
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  ollama:
+    image: docker.io/ollama/ollama:0.40.12
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # One shot: the pull-models role puts the vision model the enrichment step's config names
+  # into the ollama volume and exits 0, so the model is named nowhere in this file. Enrichment
+  # waits for it, since a missing model ends that process at startup. A model already in the
+  # volume is not pulled again, so a later `up` needs no network.
+  ollama-pull:
+    build: ./extraction
+    image: scene-rag-extraction
+    command: ["pull-models"]
+    environment:
+      SCENE_RAG_EXTRACTION_OLLAMA_URL: http://ollama:11434
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  ingestion:
+    <<: *extraction
+    command: ["worker", "--step", "ingestion"]
+    environment:
+      <<: *extraction-env
+      SCENE_RAG_EXTRACTION_SOURCE_ROOT: /data/media
+      SCENE_RAG_EXTRACTION_SOURCE_ID: ${SOURCE_ID:-local}
+      SCENE_RAG_EXTRACTION_SOURCE_ENTITLEMENTS: ${SOURCE_ENTITLEMENTS:-public}
+    volumes:
+      - ./extraction/data/media:/data/media:ro,z
+
+  segmentation:
+    <<: *extraction
+    command: ["worker", "--step", "segmentation"]
+    environment:
+      <<: *extraction-env
+      SCENE_RAG_EXTRACTION_DERIVATIVE_ROOT: /data/derivatives
+      SCENE_RAG_EXTRACTION_SEGMENTATION_WORKERS: ${SEGMENTATION_WORKERS:-1}
+      SCENE_RAG_EXTRACTION_AUDIO_CLIP_WORKERS: ${AUDIO_CLIP_WORKERS:-4}
+    volumes:
+      - ./extraction/data/media:/data/media:ro,z
+      - derivatives:/data/derivatives
+
+  enrichment:
+    <<: *extraction
+    command: ["worker", "--step", "enrichment"]
+    environment:
+      <<: *extraction-env
+      SCENE_RAG_EXTRACTION_OLLAMA_URL: http://ollama:11434
+      SCENE_RAG_EXTRACTION_WHISPER_CACHE_DIR: /data/models
+      SCENE_RAG_EXTRACTION_ENRICHMENT_WORKERS: ${ENRICHMENT_WORKERS:-1}
+    volumes:
+      - derivatives:/data/derivatives:ro
+      - whisper-cache:/data/models
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+
+  scene-api:
+    <<: *extraction
+    command: ["scene-api"]
+    environment:
+      <<: *extraction-env
+      # The code default 127.0.0.1 is unreachable from outside the container.
+      SCENE_RAG_EXTRACTION_SCENE_API_HOST: 0.0.0.0
+      SCENE_RAG_EXTRACTION_SCENE_API_PORT: "8080"
+      SCENE_RAG_EXTRACTION_SCENE_API_PAGE_SIZE: ${SCENE_API_PAGE_SIZE:-100}
+    ports:
+      - "${SCENE_API_PORT:-8080}:8080"
+    volumes:
+      - derivatives:/data/derivatives:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+volumes:
+  mongo-data:
+  ollama-models:
+  derivatives:
+  whisper-cache:
