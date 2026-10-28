@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import pytest
 
 from scene_rag.extraction import __main__ as cli
@@ -11,6 +14,9 @@ class TestGivenCommandLine:
             cli.build_parser().parse_args(["worker", "--step", "teleportation"])
         assert exit_info.value.code == 2
         assert "ingestion" in capsys.readouterr().err
+
+    def test_when_steps_listed_then_both_registered(self) -> None:
+        assert sorted(cli.STEPS) == ["ingestion", "segmentation"]
 
     def test_when_role_missing_then_rejected(self) -> None:
         with pytest.raises(SystemExit):
@@ -40,3 +46,33 @@ class TestGivenCommandLine:
         monkeypatch.setitem(cli.STEPS, "ingestion", fail)
 
         assert cli.main(["worker", "--step", "ingestion"]) == 1
+
+
+class TestGivenStepExtras:
+    """Each step's dependencies load only when that step is dispatched."""
+
+    def test_when_cli_imported_without_scenedetect_then_import_succeeds(self) -> None:
+        code = (
+            "import sys\n"
+            "sys.modules['scenedetect'] = None\n"  # makes `import scenedetect` fail
+            "import scene_rag.extraction.__main__\n"
+        )
+
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, check=False
+        )
+
+        assert result.returncode == 0, result.stderr
+
+    def test_when_segmentation_extra_missing_then_configuration_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import scene_rag.extraction.segmentation as package
+
+        # `None` in sys.modules makes the import fail; the package attribute set by an earlier
+        # import would otherwise satisfy `from ... import bootstrap` without importing.
+        monkeypatch.setitem(sys.modules, "scene_rag.extraction.segmentation.bootstrap", None)
+        monkeypatch.delattr(package, "bootstrap", raising=False)
+
+        with pytest.raises(RuntimeError, match="pdm install -G segmentation"):
+            cli.STEPS["segmentation"](once=True)

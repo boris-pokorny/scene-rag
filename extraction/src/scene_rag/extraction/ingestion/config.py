@@ -61,6 +61,10 @@ class IngestionConfig:
                 raise ValueError(f"not a MIME type: {media_type!r} for {extension!r}")
         if self.hash_algorithm not in hashlib.algorithms_available:
             raise ValueError(f"unknown hash algorithm: {self.hash_algorithm!r}")
+        if hashlib.new(self.hash_algorithm).digest_size == 0:  # shake: no fixed-length digest
+            raise ValueError(
+                f"hash algorithm must have a fixed digest size: {self.hash_algorithm!r}"
+            )
         if self.min_size_bytes < 0:
             raise ValueError("min_size_bytes must not be negative")
         if not (math.isfinite(self.min_age_seconds) and self.min_age_seconds >= 0):

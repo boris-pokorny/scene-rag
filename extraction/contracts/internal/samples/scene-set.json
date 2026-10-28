@@ -1,0 +1,84 @@
+{
+  "_id": "sha256:37c9ff2cbfb0890ef9c3f4963b1dbcb109d2f8f65a50db3a043cee8c76cbe7e1",
+  "schema_version": 1,
+  "asset_version": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "media": {
+    "duration_seconds": 16.058,
+    "frame_rate": 23.976023976023978,
+    "width": 1280,
+    "height": 720,
+    "frame_count": 385
+  },
+  "scenes": [
+    {
+      "index": 0,
+      "start_seconds": 0.0,
+      "end_seconds": 13.347,
+      "start_frame": 0,
+      "end_frame": 320,
+      "keyframes": [
+        {
+          "derivative": {
+            "digest": "sha256:6ab9f1eb8f7d3388f4f9d586f66e99fd54080df2c446f0e58668b09c08a16dd0",
+            "uri": "file:///srv/derivatives/sha256/6a/6ab9f1eb8f7d3388f4f9d586f66e99fd54080df2c446f0e58668b09c08a16dd0.jpg",
+            "media_type": "image/jpeg",
+            "size_bytes": 206602
+          },
+          "frame": 12,
+          "seconds": 0.5005
+        },
+        {
+          "derivative": {
+            "digest": "sha256:015f7e6bc5aeaf483724089e9252cc13b50951a6b69412522765cff4d780306e",
+            "uri": "file:///srv/derivatives/sha256/01/015f7e6bc5aeaf483724089e9252cc13b50951a6b69412522765cff4d780306e.jpg",
+            "media_type": "image/jpeg",
+            "size_bytes": 198311
+          },
+          "frame": 296,
+          "seconds": 12.3457
+        }
+      ],
+      "audio_clip": {
+        "digest": "sha256:f55ff16f66f43360266b95db6f8fec01d76031054306ae4a4b380598f6cfd114",
+        "uri": "file:///srv/derivatives/sha256/f5/f55ff16f66f43360266b95db6f8fec01d76031054306ae4a4b380598f6cfd114.wav",
+        "media_type": "audio/wav",
+        "size_bytes": 427150
+      }
+    },
+    {
+      "index": 1,
+      "start_seconds": 13.347,
+      "end_seconds": 16.058,
+      "start_frame": 320,
+      "end_frame": 385,
+      "keyframes": [
+        {
+          "derivative": {
+            "digest": "sha256:2f5052c9fd15b19a18c584d01363568198613f0c34e84409ef7938709a159ec2",
+            "uri": "file:///srv/derivatives/sha256/2f/2f5052c9fd15b19a18c584d01363568198613f0c34e84409ef7938709a159ec2.jpg",
+            "media_type": "image/jpeg",
+            "size_bytes": 171004
+          },
+          "frame": 332,
+          "seconds": 13.8472
+        }
+      ],
+      "audio_clip": {
+        "digest": "sha256:2c3a4249d77070058649dbd822dcaf7957586fce428cfb2ca88b94741eda8b07",
+        "uri": "file:///srv/derivatives/sha256/2c/2c3a4249d77070058649dbd822dcaf7957586fce428cfb2ca88b94741eda8b07.wav",
+        "media_type": "audio/wav",
+        "size_bytes": 86796
+      }
+    }
+  ],
+  "created_at": "2026-10-27T10:00:00Z",
+  "lineage": {
+    "step": "segmentation",
+    "fingerprint": "3b9e1f6a2c40",
+    "inputs": [
+      "asset-version:sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    ],
+    "version": "sha256:37c9ff2cbfb0890ef9c3f4963b1dbcb109d2f8f65a50db3a043cee8c76cbe7e1",
+    "image": null
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/extraction/internal/scene-set.schema.json",
+  "title": "SceneSet",
+  "description": "One document of the Scene Store (collection scene_sets): one asset version's scenes from one segmentation run, with references to its keyframes and audio clips in the Derivative Store. Written only by the segmentation step; read by the enrichment step and the scene-catalog role of the extraction service.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_id", "schema_version", "asset_version", "media", "scenes", "created_at", "lineage"],
+  "properties": {
+    "_id": {
+      "description": "Data version of the scene set: hash(asset version + fingerprint).",
+      "$ref": "#/$defs/version"
+    },
+    "schema_version": { "const": 1 },
+    "asset_version": {
+      "description": "Content hash of the asset version the scenes were cut from (Asset Registry _id).",
+      "$ref": "#/$defs/version"
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_seconds", "frame_rate", "width", "height", "frame_count"],
+      "properties": {
+        "duration_seconds": { "type": "number", "minimum": 0 },
+        "frame_rate": { "type": "number", "exclusiveMinimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "frame_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "scenes": {
+      "description": "Scenes in order; they tile the stream. At least one.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/scene" }
+    },
+    "created_at": { "$ref": "#/$defs/datetime" },
+    "lineage": { "$ref": "#/$defs/lineage" }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "datetime": {
+      "description": "UTC timestamp. Stored as a BSON date; rendered as RFC 3339 in JSON samples.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "derivative": {
+      "description": "A file in the Derivative Store, addressed by its content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "uri", "media_type", "size_bytes"],
+      "properties": {
+        "digest": { "$ref": "#/$defs/version" },
+        "uri": { "type": "string", "format": "uri" },
+        "media_type": { "type": "string", "enum": ["image/jpeg", "audio/wav"] },
+        "size_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "keyframe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["derivative", "frame", "seconds"],
+      "properties": {
+        "derivative": { "$ref": "#/$defs/derivative" },
+        "frame": { "type": "integer", "minimum": 0 },
+        "seconds": { "type": "number", "minimum": 0 }
+      }
+    },
+    "scene": {
+      "description": "A time span of the asset; the frame span is [start_frame, end_frame).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "start_seconds", "end_seconds", "start_frame", "end_frame", "keyframes", "audio_clip"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "start_seconds": { "type": "number", "minimum": 0 },
+        "end_seconds": { "type": "number", "minimum": 0 },
+        "start_frame": { "type": "integer", "minimum": 0 },
+        "end_frame": { "type": "integer", "minimum": 0 },
+        "keyframes": { "type": "array", "items": { "$ref": "#/$defs/keyframe" } },
+        "audio_clip": {
+          "description": "null when the asset has no audio stream or the scene is empty.",
+          "oneOf": [{ "$ref": "#/$defs/derivative" }, { "type": "null" }]
+        }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "fingerprint", "inputs", "version", "image"],
+      "properties": {
+        "step": { "const": "segmentation" },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{12}$" },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "type": "string", "pattern": "^asset-version:[a-z0-9_]+:[0-9a-f]+$" }
+        },
+        "version": { "$ref": "#/$defs/version" },
+        "image": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+      }
+    }
+  }
+}

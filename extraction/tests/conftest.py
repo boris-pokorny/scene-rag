@@ -10,6 +10,7 @@ from pymongo.errors import PyMongoError
 from scene_rag.extraction.ingestion.registry import Document
 from scene_rag.extraction.ingestion.settings import REGISTRY_URI_ENV
 from tests.support.fakes import FakeAssetRegistry, Harness, make_harness
+from tests.support.segmentation_fakes import SegmentationHarness, make_segmentation_harness
 
 
 @pytest.fixture
@@ -26,6 +27,16 @@ def harness() -> Harness:
     same name, to seed the registry before its cases run.
     """
     return make_harness()
+
+
+@pytest.fixture
+def segmentation_harness() -> SegmentationHarness:
+    """A segmentation service wired to fresh fakes over an empty registry.
+
+    Tests seed `segmentation_harness.assets.records`; a class may override this fixture,
+    requesting it by the same name, to seed state before its cases run.
+    """
+    return make_segmentation_harness()
 
 
 @pytest.fixture(scope="session")

@@ -23,6 +23,7 @@ class TestGivenConfig:
             lambda: IngestionConfig(media_types={".MP4": "video/mp4"}),
             lambda: IngestionConfig(media_types={".mp4": "video"}),
             lambda: IngestionConfig(hash_algorithm="no-such-hash"),
+            lambda: IngestionConfig(hash_algorithm="shake_128"),
             lambda: IngestionConfig(min_size_bytes=-1),
             lambda: IngestionConfig(min_age_seconds=-1.0),
             lambda: IngestionConfig(min_age_seconds=float("nan")),

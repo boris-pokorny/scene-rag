@@ -8,6 +8,7 @@ import jsonschema
 import pytest
 
 from scene_rag.extraction.ingestion.registry import from_document, to_document
+from scene_rag.extraction.segmentation.asset_registry import view_from_document
 from tests.support.fakes import make_record, make_reference, sha256_version
 
 CONTRACTS = Path(__file__).resolve().parents[2] / "contracts" / "internal"
@@ -78,3 +79,21 @@ class TestGivenSchema:
         assert record.version == SAMPLE["_id"]
         assert record.entitlements == frozenset({"public", "team-platform"})
         assert as_json(to_document(record)) == SAMPLE
+
+
+class TestGivenSampleReadBySegmentation:
+    """The consumer side: segmentation decodes what ingestion publishes."""
+
+    def test_when_sample_decoded_then_view_matches(self) -> None:
+        document = dict(SAMPLE)
+        document["sources"] = [
+            {**source, "modified_at": datetime.fromisoformat(source["modified_at"])}
+            for source in document["sources"]
+        ]
+
+        view = view_from_document(document)
+
+        assert view.version == SAMPLE["_id"]
+        assert view.is_live
+        assert [s.uri for s in view.sources] == [s["uri"] for s in SAMPLE["sources"]]
+        assert view.sources[0].modified_at.isoformat() == "2026-10-20T08:15:30+00:00"

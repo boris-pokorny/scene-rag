@@ -10,11 +10,33 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from typing import Final
 
-from scene_rag.extraction.ingestion import bootstrap as ingestion
-
 type StepRunner = Callable[..., None]
 
-STEPS: Final[Mapping[str, StepRunner]] = {"ingestion": ingestion.run_worker}
+
+def _ingestion(*, once: bool) -> None:
+    from scene_rag.extraction.ingestion import bootstrap
+
+    bootstrap.run_worker(once=once)
+
+
+def _segmentation(*, once: bool) -> None:
+    # Imported on dispatch: the step's extra (PySceneDetect, OpenCV) is needed only to run it.
+    try:
+        from scene_rag.extraction.segmentation import bootstrap
+    except ImportError as exc:
+        raise RuntimeError(
+            f"The segmentation step cannot be imported: {exc}. "
+            "Install its extra with `pdm install -G segmentation`."
+        ) from exc
+    bootstrap.run_worker(once=once)
+
+
+# Each step's bootstrap is imported inside its runner, so a role process loads only the
+# step it runs and the dependencies that step needs.
+STEPS: Final[Mapping[str, StepRunner]] = {
+    "ingestion": _ingestion,
+    "segmentation": _segmentation,
+}
 
 
 def build_parser() -> argparse.ArgumentParser:

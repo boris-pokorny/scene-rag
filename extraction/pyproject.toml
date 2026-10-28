@@ -9,6 +9,13 @@ dependencies = [
     "pymongo>=4.17",
 ]
 
+[project.optional-dependencies]
+# Per-step extras: the image installs them all, a role process imports only its step's.
+segmentation = [
+    "scenedetect>=0.7.1",
+    "opencv-python-headless>=4.10",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
@@ -37,7 +44,7 @@ lint = { composite = [
 format = "ruff format src tests examples"
 typecheck = "mypy"
 test = "pytest --cov"
-# Only the MongoDB cases; a subset cannot meet the coverage threshold, so no coverage here.
+# Only the MongoDB and ffmpeg cases; a subset cannot meet the coverage threshold, so no coverage here.
 test-integration = "pytest -m integration --no-cov"
 worker = "python -m scene_rag.extraction worker"
 
@@ -65,7 +72,7 @@ explicit_package_bases = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["jsonschema", "jsonschema.*"]
+module = ["jsonschema", "jsonschema.*", "scenedetect", "scenedetect.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]
@@ -81,5 +88,5 @@ skip_covered = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: needs a reachable MongoDB at SCENE_RAG_EXTRACTION_REGISTRY_URI",
+    "integration: needs a reachable MongoDB at SCENE_RAG_EXTRACTION_REGISTRY_URI or ffmpeg on PATH",
 ]
