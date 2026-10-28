@@ -5,15 +5,36 @@ default backends are `scenedetect_backend` and `ffmpeg_backend`. `AssetVersionRe
 step's read-only view of the Asset Registry. `SceneStoreReader` and `SceneStoreWriter` split
 the Scene Store into queries and commands: the step depends on both, every other step and role
 of the service may depend on the reader only. `DerivativeStore` files rendered media by content.
+`VersionSegmenter` is the per-version unit of work the pass scheduler drives, and `Dispatcher`
+the concurrency policy it, and the backends, run their loops through.
 """
 
 import dataclasses
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from scene_rag.extraction.segmentation import models
+
+
+class Dispatcher(Protocol):
+    """Applies a function to every item of a batch under some concurrency policy.
+
+    Implementations differ only in *when* the calls run (one after another, on a thread pool,
+    elsewhere); every one yields the results in the order of the items, so what a caller
+    builds from them never depends on the policy.
+    """
+
+    def map[T, R](self, function: Callable[[T], R], items: Iterable[T]) -> Iterator[R]:
+        """Apply ``function`` to each item.
+
+        Returns:
+            The results in the order of ``items``. An exception raised by ``function``
+            propagates from the iteration, at the position of the item that raised; calls
+            already running finish before it propagates; items not yet started may be skipped.
+        """
+        ...
 
 
 class AssetVersionReader(Protocol):
@@ -180,4 +201,32 @@ class Clock(Protocol):
 
     def now(self) -> datetime:
         """Return the current UTC time."""
+        ...
+
+
+class VersionRetiredError(RuntimeError):
+    """The version was retired while it was being segmented; nothing was written."""
+
+
+class VersionSegmenter(Protocol):
+    """Turns one live asset version into one scene set under a fixed fingerprint."""
+
+    @property
+    def fingerprint(self) -> str:
+        """Fingerprint stamped on the lineage of every scene set written."""
+        ...
+
+    def segment(self, record: models.AssetVersionView) -> Literal["segmented", "duplicate"]:
+        """Cut, render, clip and store the version.
+
+        Returns:
+            ``"segmented"`` when the scene set was written, ``"duplicate"`` when another worker
+            wrote it first.
+
+        Raises:
+            MediaUnavailableError: When the version's bytes cannot be read as ingestion
+                recorded them.
+            VersionRetiredError: When the version was retired before the write.
+            Exception: Any failure of a backend or store; the caller decides how to count it.
+        """
         ...

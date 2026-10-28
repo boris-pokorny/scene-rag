@@ -3,6 +3,7 @@
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from scene_rag.extraction.segmentation.dispatch import ThreadDispatcher
 from tests.support.segmentation_fakes import (
     T0,
     make_segmentation_harness,
@@ -28,11 +29,28 @@ class TestGivenAnyRegistry:
             *(make_view(v, retired_at=None if live else T0) for v, live in registry.items())
         )
 
-        first = harness.service.run_once()
-        second = harness.service.run_once()
+        first = harness.scheduler.run_once()
+        second = harness.scheduler.run_once()
 
         live = {v for v, is_live in registry.items() if is_live}
         assert first.segmented == len(live) and first.failed == 0
         assert second.segmented == 0 and len(harness.writer.commands) == len(live)
-        assert harness.scene_store.list_asset_versions(harness.service.fingerprint) == live
+        assert harness.scene_store.list_asset_versions(harness.scheduler.fingerprint) == live
         assert {s.asset_version for s in harness.scene_store.snapshot().values()} == live
+
+    @given(registry=registries)
+    @settings(max_examples=40, deadline=None)
+    def test_when_dispatched_on_threads_then_same_store_and_report_as_serial(
+        self, registry: dict[str, bool]
+    ) -> None:
+        views = [make_view(v, retired_at=None if live else T0) for v, live in registry.items()]
+        serial = make_segmentation_harness(*views)
+        with ThreadDispatcher(3) as threads:
+            parallel = make_segmentation_harness(*views, dispatcher=threads)
+
+            reports = (serial.scheduler.run_once(), parallel.scheduler.run_once())
+
+        assert reports[0] == reports[1]
+        assert parallel.scene_store.snapshot() == serial.scene_store.snapshot()
+        assert parallel.derivatives.blobs == serial.derivatives.blobs
+        assert sorted(parallel.writer.commands) == sorted(serial.writer.commands)

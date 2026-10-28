@@ -33,6 +33,15 @@ class TestGivenSettingsValues:
     def test_when_poll_interval_omitted_then_none(self) -> None:
         assert dataclasses.replace(VALID, poll_interval_seconds=None).poll_interval_seconds is None
 
+    def test_when_worker_counts_omitted_then_one_each(self) -> None:
+        assert (VALID.workers, VALID.audio_clip_workers) == (1, 1)
+
+    @pytest.mark.parametrize("field", ["workers", "audio_clip_workers"])
+    @pytest.mark.parametrize("count", [0, -1])
+    def test_when_worker_count_below_one_then_rejected(self, field: str, count: int) -> None:
+        with pytest.raises(ValueError, match=field):
+            dataclasses.replace(VALID, **{field: count})  # type: ignore[arg-type]
+
     @pytest.mark.parametrize("interval", [0.0, -1.0, float("nan"), float("inf")])
     def test_when_poll_interval_not_positive_finite_then_rejected(self, interval: float) -> None:
         with pytest.raises(ValueError, match="poll_interval_seconds"):

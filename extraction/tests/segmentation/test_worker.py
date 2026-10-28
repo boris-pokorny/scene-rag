@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pytest
@@ -45,7 +45,7 @@ def environment(
     return media
 
 
-def synthesize(path: Path) -> None:
+def synthesize(path: Path, tone_hz: int = 440) -> None:
     """Write a four-second clip with a tone and a hard cut from black to white at two seconds."""
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
@@ -54,7 +54,7 @@ def synthesize(path: Path) -> None:
         [ffmpeg, "-v", "error", "-y",
          "-f", "lavfi", "-i", "color=c=black:s=160x120:r=25:d=2",
          "-f", "lavfi", "-i", "color=c=white:s=160x120:r=25:d=2",
-         "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+         "-f", "lavfi", "-i", f"sine=frequency={tone_hz}:duration=4",
          "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
          "-map", "[v]", "-map", "2:a", "-c:v", "mpeg4", "-q:v", "2", "-c:a", "aac", "-shortest",
          str(path)],
@@ -97,3 +97,45 @@ class TestGivenIngestedVideo:
                 if d
             }
         )
+
+
+class TestGivenTwoIngestedVideos:
+    """Two synthesized clips registered by ingestion, segmented serially and then in parallel."""
+
+    def test_when_segmented_in_parallel_then_same_scene_sets_and_derivatives(
+        self,
+        environment: Path,
+        mongo_client: MongoClient[Document],
+        database: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        synthesize(environment / "first.mp4")
+        synthesize(environment / "second.mp4", tone_hz=880)
+        ingestion.run_worker(once=True)
+        bootstrap.run_worker(once=True)
+        serial = masked(mongo_client[database][COLLECTION].find())
+        files = sorted(p for p in (tmp_path / "derivatives").rglob("*") if p.is_file())
+        assert len(serial) == 2 and files
+
+        parallel_database = f"{database}_parallel"
+        monkeypatch.setenv(settings.SCENE_STORE_DATABASE_ENV, parallel_database)
+        monkeypatch.setenv(settings.WORKERS_ENV, "2")
+        monkeypatch.setenv(settings.AUDIO_CLIP_WORKERS_ENV, "2")
+        try:
+            bootstrap.run_worker(once=True)
+            parallel = masked(mongo_client[parallel_database][COLLECTION].find())
+        finally:
+            mongo_client.drop_database(parallel_database)
+
+        assert parallel == serial
+        assert sorted(p for p in (tmp_path / "derivatives").rglob("*") if p.is_file()) == files
+
+
+def masked(documents: Iterable[Document]) -> list[Document]:
+    """Scene set documents without the write timestamp, in asset version order."""
+    masked = []
+    for document in documents:
+        document.pop("created_at")
+        masked.append(document)
+    return sorted(masked, key=lambda d: str(d["asset_version"]))

@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import shutil
+import threading
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
@@ -23,8 +24,9 @@ class FilesystemDerivativeStore:
     """`DerivativeStore` filing each derivative at ``<root>/<algorithm>/<hh>/<digest><ext>``.
 
     The two-character fan-out keeps directories small. A file is moved into place under a
-    temporary name and renamed, so a reader never sees a partial file; a derivative already
-    present is left as it is, since its content is its name.
+    temporary name unique to the filing process and thread, then renamed, so a reader never
+    sees a partial file and two threads filing the same content never share a staging file; a
+    derivative already present is left as it is, since its content is its name.
     """
 
     def __init__(self, root: Path, algorithm: str) -> None:
@@ -44,7 +46,9 @@ class FilesystemDerivativeStore:
             path.unlink()
         else:
             destination.parent.mkdir(parents=True, exist_ok=True)
-            staged = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+            staged = destination.with_name(
+                f".{destination.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+            )
             shutil.move(path, staged)
             os.replace(staged, destination)
             logger.debug("filed %s as %s", path.name, destination)

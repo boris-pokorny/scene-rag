@@ -56,7 +56,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         Process exit code: 0 on success or interruption, 1 on a configuration error.
     """
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(threadName)s %(name)s: %(message)s"
     )
     args = build_parser().parse_args(argv)
     try:

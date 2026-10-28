@@ -1,8 +1,9 @@
 """Composition root of the segmentation step.
 
 Binds settings from the environment and hyperparameters from `SegmentationConfig`, then wires
-the registry view, the stores, the locator and the media backends into `SegmentationService`.
-Nothing else reads the environment.
+the registry view, the stores, the locator and the media backends into `SegmentationService`,
+and that into a `Scheduler` under the dispatchers the settings call for. Nothing else reads the
+environment, and nothing else names a concurrency policy.
 """
 
 import contextlib
@@ -22,10 +23,17 @@ from scene_rag.extraction.segmentation import settings as settings_module
 from scene_rag.extraction.segmentation.asset_registry import Document, MongoAssetVersionReader
 from scene_rag.extraction.segmentation.config import SegmentationConfig
 from scene_rag.extraction.segmentation.derivative_store import FilesystemDerivativeStore
+from scene_rag.extraction.segmentation.dispatch import SerialDispatcher, ThreadDispatcher
 from scene_rag.extraction.segmentation.ffmpeg_backend import FfmpegAudioClipper, SubprocessRunner
 from scene_rag.extraction.segmentation.file_locator import FileUriLocator
 from scene_rag.extraction.segmentation.models import truncate_to_millisecond
+from scene_rag.extraction.segmentation.protocols import (
+    AssetVersionReader,
+    Dispatcher,
+    SceneStoreWriter,
+)
 from scene_rag.extraction.segmentation.scene_store import MongoSceneStore
+from scene_rag.extraction.segmentation.scheduler import Scheduler
 from scene_rag.extraction.segmentation.service import SegmentationService
 from scene_rag.extraction.segmentation.settings import SegmentationSettings
 
@@ -84,6 +92,8 @@ def load_settings(environ: Mapping[str, str] | None = None) -> SegmentationSetti
     poll_interval = env.get(settings_module.POLL_INTERVAL_SECONDS_ENV)
     mongo_hint = "Start MongoDB and point this at it, e.g. mongodb://localhost:27017."
     try:
+        workers = _count(env, settings_module.WORKERS_ENV)
+        audio_clip_workers = _count(env, settings_module.AUDIO_CLIP_WORKERS_ENV)
         return SegmentationSettings(
             registry_uri=_require(env, settings_module.REGISTRY_URI_ENV, mongo_hint),
             registry_database=_require(
@@ -102,9 +112,29 @@ def load_settings(environ: Mapping[str, str] | None = None) -> SegmentationSetti
             ).resolve(),
             ffmpeg_binary=env.get(settings_module.FFMPEG_BINARY_ENV) or "ffmpeg",
             poll_interval_seconds=None if not poll_interval else float(poll_interval),
+            workers=1 if workers is None else workers,
+            audio_clip_workers=1 if audio_clip_workers is None else audio_clip_workers,
         )
     except ValueError as exc:
         raise RuntimeError(f"invalid settings: {exc}") from exc
+
+
+def _count(environ: Mapping[str, str], name: str) -> int | None:
+    """Read an optional count of at least one; ``None`` when unset.
+
+    Raises:
+        ValueError: Naming the variable, when the value is not a whole number of at least 1.
+    """
+    value = environ.get(name)
+    if not value:
+        return None
+    try:
+        count = int(value)
+    except ValueError:
+        count = 0
+    if count < 1:
+        raise ValueError(f"{name} must be a whole number of at least 1, not {value!r}")
+    return count
 
 
 def connect_mongo(
@@ -156,35 +186,93 @@ def require_ffmpeg(binary: str) -> None:
         )
 
 
+def make_dispatcher(workers: int, stack: contextlib.ExitStack, *, name: str) -> Dispatcher:
+    """Return the concurrency policy for ``workers``: serial for one, a thread pool above.
+
+    A pool is registered on ``stack``, so it drains before the stack's stores close. Every
+    call returns a policy of its own: a version thread blocks on the clip dispatcher, so the
+    two must never share one bounded pool, or the pool could deadlock on itself.
+
+    Args:
+        workers: Calls in flight at once.
+        stack: Owner of the pool's lifetime.
+        name: Prefix of the pool's thread names, for logs and tracebacks.
+    """
+    if workers == 1:
+        return SerialDispatcher()
+    return stack.enter_context(ThreadDispatcher(workers, thread_name_prefix=name))
+
+
 def create_service(
     settings: SegmentationSettings,
-    registry_client: MongoClient[Document],
-    scene_client: MongoClient[Document],
+    assets: AssetVersionReader,
+    scene_writer: SceneStoreWriter,
     config: SegmentationConfig | None = None,
+    clip_dispatcher: Dispatcher | None = None,
 ) -> SegmentationService:
-    """Assemble the step from its reference backends.
+    """Assemble the per-version unit of work from its reference backends.
 
-    Mongo registry view and Scene Store, filesystem Derivative Store, file locator,
-    PySceneDetect cuts and keyframes, ffmpeg clips, system clock. Scratch workspaces go
-    under ``<derivative root>/.workspace``, the store's own filesystem, so filing a rendered
-    file is a rename; the directory is created here.
+    Filesystem Derivative Store, file locator, PySceneDetect cuts and keyframes, ffmpeg clips,
+    system clock. Scratch workspaces go under ``<derivative root>/.workspace``, the store's own
+    filesystem, so filing a rendered file is a rename; the directory is created here.
+
+    Args:
+        settings: Where the step runs.
+        assets: Read view of the Asset Registry.
+        scene_writer: Command side of the Scene Store.
+        config: Hyperparameters; the defaults when ``None``.
+        clip_dispatcher: Policy the audio clips of one version are sliced under; serial when
+            ``None``.
     """
     config = SegmentationConfig() if config is None else config
-    scene_store = MongoSceneStore(scene_client, settings.scene_store_database)
     workspace_root = settings.derivative_root / WORKSPACE_DIRECTORY
     workspace_root.mkdir(parents=True, exist_ok=True)
     return SegmentationService(
-        assets=MongoAssetVersionReader(registry_client, settings.registry_database),
-        scene_reader=scene_store,
-        scene_writer=scene_store,
+        assets=assets,
+        scene_writer=scene_writer,
         derivatives=FilesystemDerivativeStore(settings.derivative_root, config.hash_algorithm),
         locator=FileUriLocator(),
         extractor=ContentSegmentExtractor(config),
         keyframes=SceneDetectKeyframeRenderer(config),
-        audio=FfmpegAudioClipper(config, SubprocessRunner(), settings.ffmpeg_binary),
+        audio=FfmpegAudioClipper(
+            config,
+            SubprocessRunner(),
+            settings.ffmpeg_binary,
+            SerialDispatcher() if clip_dispatcher is None else clip_dispatcher,
+        ),
         clock=SystemClock(),
         config=config,
         workspace_root=workspace_root,
+    )
+
+
+def create_scheduler(
+    settings: SegmentationSettings,
+    registry_client: MongoClient[Document],
+    scene_client: MongoClient[Document],
+    *,
+    dispatcher: Dispatcher | None = None,
+    clip_dispatcher: Dispatcher | None = None,
+    config: SegmentationConfig | None = None,
+) -> Scheduler:
+    """Assemble a pass: the Mongo registry view and Scene Store around `create_service`.
+
+    Args:
+        settings: Where the step runs.
+        registry_client: Connection to the Asset Registry.
+        scene_client: Connection to the Scene Store.
+        dispatcher: Policy the versions of a pass run under; serial when ``None``.
+        clip_dispatcher: Policy the audio clips of one version are sliced under; serial when
+            ``None``.
+        config: Hyperparameters; the defaults when ``None``.
+    """
+    assets = MongoAssetVersionReader(registry_client, settings.registry_database)
+    scene_store = MongoSceneStore(scene_client, settings.scene_store_database)
+    return Scheduler(
+        assets=assets,
+        scene_reader=scene_store,
+        segmenter=create_service(settings, assets, scene_store, config, clip_dispatcher),
+        dispatcher=SerialDispatcher() if dispatcher is None else dispatcher,
     )
 
 
@@ -223,16 +311,27 @@ def run_worker(*, once: bool, sleep: Callable[[float], None] = time.sleep) -> No
         scene_client = stack.enter_context(
             connect_mongo(settings.scene_store_uri, redacted=settings.redacted_scene_store_uri)
         )
-        service = create_service(settings, registry_client, scene_client)
-        logger.info("segmentation fingerprint %s", service.fingerprint)
+        scheduler = create_scheduler(
+            settings,
+            registry_client,
+            scene_client,
+            dispatcher=make_dispatcher(settings.workers, stack, name="segmentation"),
+            clip_dispatcher=make_dispatcher(settings.audio_clip_workers, stack, name="clip"),
+        )
+        logger.info(
+            "segmentation fingerprint %s; %d version(s) and %d audio clip(s) at once",
+            scheduler.fingerprint,
+            settings.workers,
+            settings.audio_clip_workers,
+        )
         if once:
-            service.run_once()
+            scheduler.run_once()
             return
         assert interval is not None  # checked above, before connecting
         failures = 0
         while True:
             try:
-                service.run_once()
+                scheduler.run_once()
             except Exception:
                 pause = _backoff_seconds(interval, failures)
                 failures += 1

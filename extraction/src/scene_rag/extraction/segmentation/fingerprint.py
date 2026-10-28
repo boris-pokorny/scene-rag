@@ -11,8 +11,9 @@ from scene_rag.extraction.segmentation.config import SegmentationConfig
 _PACKAGE_DIR = Path(__file__).parent
 
 # The modules that decide what the step writes. Deployment code (`bootstrap`, `settings`,
-# the store backends) and the interfaces (`protocols`) are left out: a changed log message or
-# connection timeout must not imply reprocessing.
+# the store backends), orchestration (`scheduler`, `dispatch`) and the interfaces
+# (`protocols`) are left out: a changed log message, connection timeout or worker count must
+# not imply reprocessing.
 _FINGERPRINTED_MODULES: Final = (
     "config.py",
     "ffmpeg_backend.py",

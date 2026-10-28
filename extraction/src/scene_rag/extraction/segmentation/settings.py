@@ -19,6 +19,8 @@ SCENE_STORE_DATABASE_ENV: Final = ENV_PREFIX + "SCENE_STORE_DATABASE"
 DERIVATIVE_ROOT_ENV: Final = ENV_PREFIX + "DERIVATIVE_ROOT"
 FFMPEG_BINARY_ENV: Final = ENV_PREFIX + "FFMPEG_BINARY"
 POLL_INTERVAL_SECONDS_ENV: Final = ENV_PREFIX + "POLL_INTERVAL_SECONDS"
+WORKERS_ENV: Final = ENV_PREFIX + "SEGMENTATION_WORKERS"
+AUDIO_CLIP_WORKERS_ENV: Final = ENV_PREFIX + "AUDIO_CLIP_WORKERS"
 
 _USERINFO: Final = re.compile(r"(?<=://)[^@/]+@")
 
@@ -42,6 +44,12 @@ class SegmentationSettings:
         ffmpeg_binary: Name or path of the ffmpeg executable.
         poll_interval_seconds: Pause between two passes of the worker loop; ``None`` when the
             step runs a single pass and never sleeps.
+        workers: Asset versions segmented at once within a pass; one means one after another.
+            A single version already keeps several cores busy decoding, so a worthwhile value
+            is about the core count divided by four.
+        audio_clip_workers: ffmpeg processes slicing the audio clips of one version at once;
+            spawning dominates a clip, so four is a measured sweet spot. Up to
+            ``workers × audio_clip_workers`` ffmpeg processes may run at once.
     """
 
     registry_uri: str
@@ -51,6 +59,8 @@ class SegmentationSettings:
     derivative_root: Path
     ffmpeg_binary: str = "ffmpeg"
     poll_interval_seconds: float | None = None
+    workers: int = 1
+    audio_clip_workers: int = 1
 
     @property
     def redacted_registry_uri(self) -> str:
@@ -83,3 +93,6 @@ class SegmentationSettings:
         interval = self.poll_interval_seconds
         if interval is not None and not (math.isfinite(interval) and interval > 0):
             raise ValueError("poll_interval_seconds must be a positive finite number")
+        for name in ("workers", "audio_clip_workers"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} must be at least 1")

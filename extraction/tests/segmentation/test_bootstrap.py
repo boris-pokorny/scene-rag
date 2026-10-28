@@ -1,3 +1,5 @@
+import contextlib
+import logging
 import shutil
 from collections.abc import Callable
 from datetime import UTC
@@ -10,16 +12,19 @@ from pymongo.errors import ServerSelectionTimeoutError
 
 from scene_rag.extraction.segmentation import bootstrap, settings
 from scene_rag.extraction.segmentation.asset_registry import Document
+from scene_rag.extraction.segmentation.dispatch import SerialDispatcher, ThreadDispatcher
 from scene_rag.extraction.segmentation.models import SegmentationReport
+from scene_rag.extraction.segmentation.protocols import Dispatcher
 
 
-class CountingService:
-    """Stands in for SegmentationService: counts passes, fails the ones listed in `failing`."""
+class CountingScheduler:
+    """Stands in for Scheduler: counts passes, fails the ones listed in `failing`."""
 
     fingerprint = "0123456789ab"
 
     def __init__(self, failing: frozenset[int] = frozenset()) -> None:
         self.passes = 0
+        self.dispatchers: dict[str, Dispatcher | None] = {}
         self._failing = failing
 
     def run_once(self) -> SegmentationReport:
@@ -53,7 +58,7 @@ class FakeMongoClient:
         self.closed = True
 
 
-type Wire = Callable[..., tuple[CountingService, list[FakeMongoClient]]]
+type Wire = Callable[..., tuple[CountingScheduler, list[FakeMongoClient]]]
 
 
 @pytest.fixture
@@ -67,6 +72,8 @@ def environment(tmp_path: Path) -> dict[str, str]:
         settings.DERIVATIVE_ROOT_ENV: str(tmp_path / "derivatives"),
         settings.FFMPEG_BINARY_ENV: "/opt/ffmpeg/bin/ffmpeg",
         settings.POLL_INTERVAL_SECONDS_ENV: "2.5",
+        settings.WORKERS_ENV: "3",
+        settings.AUDIO_CLIP_WORKERS_ENV: "4",
     }
 
 
@@ -85,17 +92,33 @@ class TestGivenEnvironment:
         assert loaded.derivative_root == (tmp_path / "derivatives").resolve()
         assert loaded.ffmpeg_binary == "/opt/ffmpeg/bin/ffmpeg"
         assert loaded.poll_interval_seconds == 2.5
+        assert (loaded.workers, loaded.audio_clip_workers) == (3, 4)
 
     def test_when_optional_variables_absent_then_defaults(
         self, environment: dict[str, str]
     ) -> None:
         del environment[settings.POLL_INTERVAL_SECONDS_ENV]
         del environment[settings.FFMPEG_BINARY_ENV]
+        del environment[settings.WORKERS_ENV]
+        environment[settings.AUDIO_CLIP_WORKERS_ENV] = ""
 
         loaded = bootstrap.load_settings(environment)
 
         assert loaded.poll_interval_seconds is None
         assert loaded.ffmpeg_binary == "ffmpeg"
+        assert (loaded.workers, loaded.audio_clip_workers) == (1, 1)
+
+    @pytest.mark.parametrize("variable", [settings.WORKERS_ENV, settings.AUDIO_CLIP_WORKERS_ENV])
+    @pytest.mark.parametrize("value", ["0", "-2", "two", "1.5"])
+    def test_when_worker_count_invalid_then_runtime_error(
+        self, environment: dict[str, str], variable: str, value: str
+    ) -> None:
+        environment[variable] = value
+
+        with pytest.raises(RuntimeError, match="invalid settings") as exc_info:
+            bootstrap.load_settings(environment)
+
+        assert variable in str(exc_info.value) and value in str(exc_info.value)
 
     @pytest.mark.parametrize(
         "missing",
@@ -134,33 +157,61 @@ class TestGivenSystemClock:
         assert now.microsecond % 1000 == 0
 
 
+class TestGivenMakeDispatcher:
+    """The policy chosen for a worker count, and who closes it."""
+
+    def test_when_one_worker_then_serial_and_nothing_to_close(self) -> None:
+        with contextlib.ExitStack() as stack:
+            dispatcher = bootstrap.make_dispatcher(1, stack, name="test")
+
+        assert isinstance(dispatcher, SerialDispatcher)
+
+    def test_when_several_workers_then_pool_drained_when_stack_closes(self) -> None:
+        with contextlib.ExitStack() as stack:
+            dispatcher = bootstrap.make_dispatcher(3, stack, name="test")
+            assert isinstance(dispatcher, ThreadDispatcher) and dispatcher.workers == 3
+            assert list(dispatcher.map(abs, [-1])) == [1]
+
+        with pytest.raises(RuntimeError, match="shutdown"):
+            list(dispatcher.map(abs, [-1]))
+
+
 class TestGivenWorkerLoop:
-    """`run_worker` over a counting service and fake clients, settings from `environment`."""
+    """`run_worker` over a counting scheduler and fake clients, settings from `environment`."""
 
     @pytest.fixture
     def wire(self, environment: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> Wire:
         def start(
             failing: frozenset[int] = frozenset(), poll_interval: str | None = "2.5"
-        ) -> tuple[CountingService, list[FakeMongoClient]]:
+        ) -> tuple[CountingScheduler, list[FakeMongoClient]]:
             if poll_interval is None:
                 del environment[settings.POLL_INTERVAL_SECONDS_ENV]
             else:
                 environment[settings.POLL_INTERVAL_SECONDS_ENV] = poll_interval
             loaded = bootstrap.load_settings(environment)
-            service = CountingService(failing)
+            scheduler = CountingScheduler(failing)
             clients: list[FakeMongoClient] = []
 
             def connect(uri: str, *, redacted: str) -> FakeMongoClient:
                 clients.append(FakeMongoClient(uri))
                 return clients[-1]
 
+            def create(
+                settings: object,
+                registry: object,
+                scenes: object,
+                *,
+                dispatcher: Dispatcher | None = None,
+                clip_dispatcher: Dispatcher | None = None,
+            ) -> CountingScheduler:
+                scheduler.dispatchers = {"versions": dispatcher, "clips": clip_dispatcher}
+                return scheduler
+
             monkeypatch.setattr(bootstrap, "load_settings", lambda: loaded)
             monkeypatch.setattr(shutil, "which", lambda binary: binary)
             monkeypatch.setattr(bootstrap, "connect_mongo", connect)
-            monkeypatch.setattr(
-                bootstrap, "create_service", lambda settings, registry, scenes: service
-            )
-            return service, clients
+            monkeypatch.setattr(bootstrap, "create_scheduler", create)
+            return scheduler, clients
 
         return start
 
@@ -177,13 +228,40 @@ class TestGivenWorkerLoop:
         return slept, sleep
 
     def test_when_once_then_one_pass_and_both_clients_closed(self, wire: Wire) -> None:
-        service, clients = wire()
+        scheduler, clients = wire()
 
         bootstrap.run_worker(once=True)
 
-        assert service.passes == 1
+        assert scheduler.passes == 1
         assert [c.uri for c in clients] == ["mongodb://unused:27017", "mongodb://scenes:27017"]
         assert all(c.entered and c.closed for c in clients)
+
+    def test_when_workers_configured_then_pools_sized_and_drained_on_exit(
+        self, wire: Wire, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        scheduler, _ = wire()
+        caplog.set_level(logging.INFO, logger=bootstrap.__name__)
+
+        bootstrap.run_worker(once=True)
+
+        versions, clips = scheduler.dispatchers["versions"], scheduler.dispatchers["clips"]
+        assert isinstance(versions, ThreadDispatcher) and versions.workers == 3
+        assert isinstance(clips, ThreadDispatcher) and clips.workers == 4
+        for pool in (versions, clips):
+            with pytest.raises(RuntimeError, match="shutdown"):
+                list(pool.map(abs, [-1]))
+        assert "3 version(s) and 4 audio clip(s) at once" in caplog.text
+
+    def test_when_single_workers_then_serial_dispatchers(
+        self, wire: Wire, environment: dict[str, str]
+    ) -> None:
+        environment[settings.WORKERS_ENV] = "1"
+        environment[settings.AUDIO_CLIP_WORKERS_ENV] = "1"
+        scheduler, _ = wire()
+
+        bootstrap.run_worker(once=True)
+
+        assert all(isinstance(d, SerialDispatcher) for d in scheduler.dispatchers.values())
 
     def test_when_pass_fails_once_then_error_propagates_and_clients_closed(
         self, wire: Wire
@@ -198,13 +276,13 @@ class TestGivenWorkerLoop:
     def test_when_passes_keep_failing_then_pause_doubles_until_one_succeeds(
         self, wire: Wire, caplog: pytest.LogCaptureFixture
     ) -> None:
-        service, _ = wire(failing=frozenset({1, 2, 3}))
+        scheduler, _ = wire(failing=frozenset({1, 2, 3}))
         slept, sleep = self.interrupt_after(5)
 
         with pytest.raises(KeyboardInterrupt):
             bootstrap.run_worker(once=False, sleep=sleep)
 
-        assert service.passes == 5
+        assert scheduler.passes == 5
         assert slept == [2.5, 5.0, 10.0, 2.5, 2.5]
         assert "retrying in 10.0 s" in caplog.text
 
@@ -220,24 +298,24 @@ class TestGivenWorkerLoop:
     def test_when_ffmpeg_missing_then_error_before_connecting(
         self, wire: Wire, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        service, clients = wire()
+        scheduler, clients = wire()
         monkeypatch.setattr(shutil, "which", lambda binary: None)
 
         with pytest.raises(RuntimeError, match=settings.FFMPEG_BINARY_ENV) as exc_info:
             bootstrap.run_worker(once=True)
 
         assert "/opt/ffmpeg/bin/ffmpeg" in str(exc_info.value)
-        assert service.passes == 0 and clients == []
+        assert scheduler.passes == 0 and clients == []
 
     def test_when_looping_without_poll_interval_then_error_before_connecting(
         self, wire: Wire
     ) -> None:
-        service, clients = wire(poll_interval=None)
+        scheduler, clients = wire(poll_interval=None)
 
         with pytest.raises(RuntimeError, match=settings.POLL_INTERVAL_SECONDS_ENV):
             bootstrap.run_worker(once=False)
 
-        assert service.passes == 0 and clients == []
+        assert scheduler.passes == 0 and clients == []
 
 
 class TestGivenUnreachableServer:
@@ -270,7 +348,7 @@ class TestGivenUnreachableServer:
 
 
 class TestGivenRealWiring:
-    """`create_service` with fake clients: the reference backends compose."""
+    """`create_scheduler` with fake clients: the reference backends compose."""
 
     def test_when_created_then_fingerprint_computed_and_root_and_workspace_created(
         self, environment: dict[str, str], tmp_path: Path
@@ -278,9 +356,9 @@ class TestGivenRealWiring:
         loaded = bootstrap.load_settings(environment)
         client = cast("MongoClient[Document]", FakeStoreClient())
 
-        service = bootstrap.create_service(loaded, client, client)
+        scheduler = bootstrap.create_scheduler(loaded, client, client)
 
-        assert len(service.fingerprint) == 12
+        assert len(scheduler.fingerprint) == 12
         assert (tmp_path / "derivatives" / bootstrap.WORKSPACE_DIRECTORY).is_dir()
 
 

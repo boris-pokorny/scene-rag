@@ -11,7 +11,7 @@ from typing import Final, Protocol
 
 from scene_rag.extraction.segmentation import models
 from scene_rag.extraction.segmentation.config import SegmentationConfig
-from scene_rag.extraction.segmentation.protocols import AudioExtractionError
+from scene_rag.extraction.segmentation.protocols import AudioExtractionError, Dispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +52,33 @@ class SubprocessRunner:
 
 
 class FfmpegAudioClipper:
-    """`AudioClipper` slicing one WAV per segment out of a media file."""
+    """`AudioClipper` slicing one WAV per segment out of a media file.
 
-    def __init__(self, config: SegmentationConfig, runner: CommandRunner, binary: str) -> None:
-        """Take sample rate and channels from ``config``; run ``binary`` through ``runner``."""
+    One ffmpeg process per segment, each seeking its own slice, so the segments of a file are
+    independent and run under whatever `Dispatcher` is given: the process count in flight is
+    the dispatcher's concurrency, the clips are the same whichever it is.
+    """
+
+    def __init__(
+        self,
+        config: SegmentationConfig,
+        runner: CommandRunner,
+        binary: str,
+        dispatcher: Dispatcher,
+    ) -> None:
+        """Take sample rate and channels from ``config``; run ``binary`` through ``runner``.
+
+        Args:
+            config: Hyperparameters; the clips' sample rate and channel count.
+            runner: Executes the command lines.
+            binary: Name or path of the ffmpeg executable.
+            dispatcher: Concurrency policy the per-segment extractions run under.
+        """
         self._sample_rate = config.audio_sample_rate
         self._channels = config.audio_channels
         self._runner = runner
         self._binary = binary
+        self._dispatcher = dispatcher
 
     def clip(
         self, path: Path, segments: Sequence[models.Segment], output_dir: Path
@@ -69,12 +88,14 @@ class FfmpegAudioClipper:
             logger.info("no audio stream in %s", path.name)
             return {}
         output_dir.mkdir(parents=True, exist_ok=True)
+        targets = [
+            (segment, output_dir / clip_name(segment))
+            for segment in segments
+            if segment.duration_seconds > 0
+        ]
+        extracted = self._dispatcher.map(lambda target: self._extract(path, *target), targets)
         clips: dict[int, Path] = {}
-        for segment in segments:
-            if segment.duration_seconds <= 0:
-                continue
-            destination = output_dir / clip_name(segment)
-            self._extract(path, segment, destination)
+        for (segment, destination), _ in zip(targets, extracted, strict=True):
             if destination.stat().st_size <= _WAV_HEADER_BYTES:
                 logger.info("no samples for segment %d of %s", segment.index, path.name)
                 destination.unlink()

@@ -67,3 +67,15 @@ class TestGivenReport:
         assert str(SegmentationReport(segmented=2, failed=1)) == (
             "segmented=2 duplicate=0 dropped=0 deferred=0 failed=1"
         )
+
+    def test_when_counted_then_one_per_outcome_whatever_the_order(self) -> None:
+        report = SegmentationReport.counting(
+            ["failed", "segmented", "deferred", "segmented", "dropped", "duplicate", "segmented"]
+        )
+
+        assert report == SegmentationReport(
+            segmented=3, duplicate=1, dropped=1, deferred=1, failed=1
+        )
+
+    def test_when_counted_over_nothing_then_zero(self) -> None:
+        assert SegmentationReport.counting(iter(())) == SegmentationReport()

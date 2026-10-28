@@ -1,10 +1,14 @@
-"""The segmentation pass: cut every pending asset version into a scene set."""
+"""The unit of segmentation work: cut one asset version into one scene set.
+
+`scheduler` decides which versions a pass processes and how many at a time; this module decides
+what a scene set contains, and is fingerprinted for it.
+"""
 
 import dataclasses
 import logging
 import tempfile
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from scene_rag.extraction.segmentation import models
 from scene_rag.extraction.segmentation.config import SegmentationConfig
@@ -16,10 +20,9 @@ from scene_rag.extraction.segmentation.protocols import (
     DerivativeStore,
     KeyframeRenderer,
     MediaLocator,
-    MediaUnavailableError,
-    SceneStoreReader,
     SceneStoreWriter,
     SegmentExtractor,
+    VersionRetiredError,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,29 +31,23 @@ KEYFRAME_MEDIA_TYPE: Final = "image/jpeg"
 AUDIO_MEDIA_TYPE: Final = "audio/wav"
 
 
-class _Dropped(Exception):
-    """The version was retired while it was being segmented."""
-
-
 class SegmentationService:
-    """Segment every live asset version that has no scene set under the current fingerprint.
+    """`VersionSegmenter` over the reference backends: the step's output, version by version.
 
-    Pending work is derived, never flagged: a pass lists the live versions and the asset
-    versions already segmented under this fingerprint, and processes the difference. Each
-    version is cut, rendered and clipped in a scratch workspace; the derivatives are filed
+    Each version is cut, rendered and clipped in a scratch workspace; the derivatives are filed
     first and the scene set last, so a stored set never points at a file that is missing.
     Derivatives are content-addressed, so a failed or repeated run leaves nothing to undo.
 
-    A version whose bytes cannot be read as ingestion recorded them is deferred: ingestion
-    reconciles the source, after which the version is either retired or still pending. A
-    version retired while being processed is dropped before the scene set is written.
+    A version whose bytes cannot be read as ingestion recorded them is left to the caller to
+    defer: ingestion reconciles the source, after which the version is either retired or still
+    pending. A version retired while being processed is dropped before the scene set is
+    written. Versions are independent, so a `Dispatcher` may run several at once.
     """
 
     def __init__(
         self,
         *,
         assets: AssetVersionReader,
-        scene_reader: SceneStoreReader,
         scene_writer: SceneStoreWriter,
         derivatives: DerivativeStore,
         locator: MediaLocator,
@@ -64,8 +61,7 @@ class SegmentationService:
         """Compose the pass from its collaborators; `bootstrap` is the only caller.
 
         Args:
-            assets: Read view of the Asset Registry.
-            scene_reader: Query side of the Scene Store.
+            assets: Read view of the Asset Registry, for the final liveness check.
             scene_writer: Command side of the Scene Store.
             derivatives: Where keyframes and clips are filed.
             locator: Finds a version's bytes on the local filesystem.
@@ -79,7 +75,6 @@ class SegmentationService:
                 store's filesystem so filing a derivative is a rename, not a copy.
         """
         self._assets = assets
-        self._scene_reader = scene_reader
         self._scene_writer = scene_writer
         self._derivatives = derivatives
         self._locator = locator
@@ -96,36 +91,8 @@ class SegmentationService:
         """Fingerprint stamped on the lineage of every scene set this service writes."""
         return self._fingerprint
 
-    def run_once(self) -> models.SegmentationReport:
-        """Run one pass over the pending versions.
-
-        Returns:
-            Counters of what the pass did. A failing version is counted and skipped; a failing
-            listing propagates, since nothing can be decided without it.
-        """
-        done = self._scene_reader.list_asset_versions(self._fingerprint)
-        pending = [record for record in self._assets.list_live() if record.version not in done]
-        logger.info(
-            "%d asset version(s) pending under fingerprint %s", len(pending), self._fingerprint
-        )
-        report = models.SegmentationReport()
-        for record in pending:
-            try:
-                outcome = self._segment(record)
-            except MediaUnavailableError as exc:
-                logger.warning("deferred %s: %s", record.version, exc)
-                outcome = "deferred"
-            except _Dropped:
-                logger.info("dropped %s: retired while segmenting", record.version)
-                outcome = "dropped"
-            except Exception:
-                logger.exception("failed to segment %s", record.version)
-                outcome = "failed"
-            report = dataclasses.replace(report, **{outcome: getattr(report, outcome) + 1})
-        logger.info("segmentation pass: %s", report)
-        return report
-
-    def _segment(self, record: models.AssetVersionView) -> str:
+    def segment(self, record: models.AssetVersionView) -> Literal["segmented", "duplicate"]:
+        """Cut, render, clip and store one version; see `VersionSegmenter.segment`."""
         path = self._locator.locate(record)
         logger.info("segmenting %s from %s", record.version, path.name)
         with tempfile.TemporaryDirectory(
@@ -155,7 +122,7 @@ class SegmentationService:
 
         current = self._assets.get(record.version)
         if current is None or not current.is_live:
-            raise _Dropped
+            raise VersionRetiredError(record.version)
         version = models.scene_set_version(
             record.version, self._fingerprint, self._config.hash_algorithm
         )

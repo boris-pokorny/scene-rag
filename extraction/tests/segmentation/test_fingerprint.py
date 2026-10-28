@@ -5,13 +5,16 @@ import pytest
 from scene_rag.extraction.segmentation import fingerprint
 from scene_rag.extraction.segmentation.config import SegmentationConfig
 
+# Modules of the step whose changes must never imply reprocessing.
+DEPLOYMENT_MODULES = ("bootstrap.py", "scene_store.py", "scheduler.py", "dispatch.py")
+
 
 class TestGivenPackageSources:
     """A stand-in package directory holding every module of the step."""
 
     @pytest.fixture
     def package(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-        for name in (*fingerprint._FINGERPRINTED_MODULES, "bootstrap.py", "scene_store.py"):
+        for name in (*fingerprint._FINGERPRINTED_MODULES, *DEPLOYMENT_MODULES):
             (tmp_path / name).write_text(f"# {name}\n")
         monkeypatch.setattr(fingerprint, "_PACKAGE_DIR", tmp_path)
         return tmp_path
@@ -24,8 +27,8 @@ class TestGivenPackageSources:
 
     def test_when_deployment_module_changes_then_unchanged(self, package: Path) -> None:
         before = fingerprint.compute_fingerprint(SegmentationConfig())
-        (package / "bootstrap.py").write_text("# new log message\n")
-        (package / "scene_store.py").write_text("# new index\n")
+        for name in DEPLOYMENT_MODULES:
+            (package / name).write_text(f"# {name}: new log message, index or worker count\n")
 
         assert fingerprint.compute_fingerprint(SegmentationConfig()) == before
 

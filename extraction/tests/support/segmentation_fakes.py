@@ -2,15 +2,19 @@
 
 import dataclasses
 import hashlib
-from collections.abc import Mapping, Sequence
+import threading
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from scene_rag.extraction.segmentation import models
 from scene_rag.extraction.segmentation.config import SegmentationConfig
+from scene_rag.extraction.segmentation.dispatch import SerialDispatcher
 from scene_rag.extraction.segmentation.protocols import (
     Analysis,
     AudioExtractionError,
+    Dispatcher,
     KeyframeRenderer,
     MediaUnavailableError,
     RenderedFrame,
@@ -18,6 +22,7 @@ from scene_rag.extraction.segmentation.protocols import (
     SegmentExtractor,
     VideoAnalysisError,
 )
+from scene_rag.extraction.segmentation.scheduler import Scheduler
 from scene_rag.extraction.segmentation.service import SegmentationService
 
 T0 = datetime(2026, 10, 27, 9, 0, tzinfo=UTC)
@@ -323,9 +328,69 @@ class FakeAudioClipper:
         return clips
 
 
+class FakeSegmenter:
+    """VersionSegmenter answering per version from a script: an outcome or an exception.
+
+    Versions absent from the script are ``"segmented"``. Calls are recorded in order.
+    """
+
+    def __init__(
+        self,
+        script: Mapping[str, Literal["segmented", "duplicate"] | Exception] | None = None,
+        fingerprint: str = "0123456789ab",
+    ) -> None:
+        self.script = dict(script or {})
+        self.fingerprint = fingerprint
+        self.calls: list[str] = []
+        self._lock = threading.Lock()
+
+    def segment(self, record: models.AssetVersionView) -> Literal["segmented", "duplicate"]:
+        with self._lock:
+            self.calls.append(record.version)
+        answer = self.script.get(record.version, "segmented")
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+class RecordingDispatcher:
+    """Dispatcher delegating to another one, keeping every batch of items it was handed."""
+
+    def __init__(self, inner: Dispatcher | None = None) -> None:
+        self._inner = inner or SerialDispatcher()
+        self.batches: list[list[object]] = []
+
+    def map[T, R](self, function: Callable[[T], R], items: Iterable[T]) -> Iterator[R]:
+        batch = list(items)
+        self.batches.append(list(batch))
+        return self._inner.map(function, batch)
+
+
+class ConcurrencyGauge:
+    """Counts calls in flight at once; wrap a call in `enter` to measure a dispatcher."""
+
+    def __init__(self) -> None:
+        self.peak = 0
+        self._active = 0
+        self._lock = threading.Lock()
+
+    def enter(self) -> None:
+        with self._lock:
+            self._active += 1
+            self.peak = max(self.peak, self._active)
+
+    def leave(self) -> None:
+        with self._lock:
+            self._active -= 1
+
+
 @dataclasses.dataclass
 class SegmentationHarness:
-    """A segmentation service wired to fakes, exposing them for assertions."""
+    """A segmentation pass wired to fakes, exposing them for assertions.
+
+    `service` is the per-version unit of work, `scheduler` the pass over it; both share the
+    fakes, and `variant` rebuilds the pair with some collaborators replaced.
+    """
 
     assets: FakeAssetVersionReader
     scene_store: FakeSceneStore
@@ -337,8 +402,9 @@ class SegmentationHarness:
     audio: FakeAudioClipper
     clock: FakeClock
     service: SegmentationService
+    scheduler: Scheduler
 
-    def variant(
+    def variant_service(
         self,
         *,
         writer: SceneStoreWriter | None = None,
@@ -353,7 +419,6 @@ class SegmentationHarness:
         """Build a second service over the same fakes with some collaborators replaced."""
         return SegmentationService(
             assets=self.assets,
-            scene_reader=self.scene_store,
             scene_writer=writer or self.writer,
             derivatives=derivatives or self.derivatives,
             locator=locator or self.locator,
@@ -365,9 +430,42 @@ class SegmentationHarness:
             workspace_root=workspace_root,
         )
 
+    def variant(
+        self,
+        *,
+        writer: SceneStoreWriter | None = None,
+        derivatives: FakeDerivativeStore | None = None,
+        locator: FakeLocator | None = None,
+        extractor: SegmentExtractor | None = None,
+        keyframes: KeyframeRenderer | None = None,
+        audio: FakeAudioClipper | None = None,
+        config: SegmentationConfig | None = None,
+        workspace_root: Path | None = None,
+        dispatcher: Dispatcher | None = None,
+    ) -> Scheduler:
+        """Build a second pass over the same fakes with some collaborators replaced."""
+        service = self.variant_service(
+            writer=writer,
+            derivatives=derivatives,
+            locator=locator,
+            extractor=extractor,
+            keyframes=keyframes,
+            audio=audio,
+            config=config,
+            workspace_root=workspace_root,
+        )
+        return Scheduler(
+            assets=self.assets,
+            scene_reader=self.scene_store,
+            segmenter=service,
+            dispatcher=dispatcher or SerialDispatcher(),
+        )
 
-def make_segmentation_harness(*records: models.AssetVersionView) -> SegmentationHarness:
-    """Wire a service to fresh fakes over the given registry records."""
+
+def make_segmentation_harness(
+    *records: models.AssetVersionView, dispatcher: Dispatcher | None = None
+) -> SegmentationHarness:
+    """Wire a pass to fresh fakes over the given registry records; serial unless told."""
     assets = FakeAssetVersionReader(*records)
     scene_store = FakeSceneStore()
     writer = RecordingSceneWriter(scene_store)
@@ -379,7 +477,6 @@ def make_segmentation_harness(*records: models.AssetVersionView) -> Segmentation
     clock = FakeClock()
     service = SegmentationService(
         assets=assets,
-        scene_reader=scene_store,
         scene_writer=writer,
         derivatives=derivatives,
         locator=locator,
@@ -388,6 +485,12 @@ def make_segmentation_harness(*records: models.AssetVersionView) -> Segmentation
         audio=audio,
         clock=clock,
         config=SegmentationConfig(),
+    )
+    scheduler = Scheduler(
+        assets=assets,
+        scene_reader=scene_store,
+        segmenter=service,
+        dispatcher=dispatcher or SerialDispatcher(),
     )
     return SegmentationHarness(
         assets,
@@ -400,4 +503,5 @@ def make_segmentation_harness(*records: models.AssetVersionView) -> Segmentation
         audio,
         clock,
         service,
+        scheduler,
     )

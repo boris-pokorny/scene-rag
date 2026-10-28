@@ -2,8 +2,10 @@
 
 import dataclasses
 import hashlib
+from collections import Counter
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Final
+from typing import Final, Literal
 
 SCHEMA_VERSION: Final = 1
 STEP_NAME: Final = "segmentation"
@@ -208,6 +210,10 @@ class SceneSet:
     schema_version: int = SCHEMA_VERSION
 
 
+type Outcome = Literal["segmented", "duplicate", "dropped", "deferred", "failed"]
+"""What became of one version in a pass; the field names of `SegmentationReport`."""
+
+
 @dataclasses.dataclass(frozen=True)
 class SegmentationReport:
     """Counters of one segmentation pass.
@@ -226,6 +232,12 @@ class SegmentationReport:
     dropped: int = 0
     deferred: int = 0
     failed: int = 0
+
+    @classmethod
+    def counting(cls, outcomes: Iterable[Outcome]) -> SegmentationReport:
+        """Tally the outcomes of a pass, in whatever order they arrive."""
+        counts: Counter[str] = Counter(outcomes)
+        return cls(**{field.name: counts[field.name] for field in dataclasses.fields(cls)})
 
     def __str__(self) -> str:
         """Render the counters as ``name=value`` pairs for logs."""
