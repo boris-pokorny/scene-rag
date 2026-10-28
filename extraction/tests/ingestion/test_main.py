@@ -1,3 +1,4 @@
+import importlib
 import subprocess
 import sys
 
@@ -15,8 +16,8 @@ class TestGivenCommandLine:
         assert exit_info.value.code == 2
         assert "ingestion" in capsys.readouterr().err
 
-    def test_when_steps_listed_then_both_registered(self) -> None:
-        assert sorted(cli.STEPS) == ["ingestion", "segmentation"]
+    def test_when_steps_listed_then_every_step_registered(self) -> None:
+        assert sorted(cli.STEPS) == ["enrichment", "ingestion", "segmentation"]
 
     def test_when_role_missing_then_rejected(self) -> None:
         with pytest.raises(SystemExit):
@@ -64,15 +65,16 @@ class TestGivenStepExtras:
 
         assert result.returncode == 0, result.stderr
 
-    def test_when_segmentation_extra_missing_then_configuration_error(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize("step", ["segmentation", "enrichment"])
+    def test_when_step_extra_missing_then_configuration_error(
+        self, monkeypatch: pytest.MonkeyPatch, step: str
     ) -> None:
-        import scene_rag.extraction.segmentation as package
+        package = importlib.import_module(f"scene_rag.extraction.{step}")
 
         # `None` in sys.modules makes the import fail; the package attribute set by an earlier
         # import would otherwise satisfy `from ... import bootstrap` without importing.
-        monkeypatch.setitem(sys.modules, "scene_rag.extraction.segmentation.bootstrap", None)
+        monkeypatch.setitem(sys.modules, f"scene_rag.extraction.{step}.bootstrap", None)
         monkeypatch.delattr(package, "bootstrap", raising=False)
 
-        with pytest.raises(RuntimeError, match="pdm install -G segmentation"):
-            cli.STEPS["segmentation"](once=True)
+        with pytest.raises(RuntimeError, match=f"pdm install -G {step}"):
+            cli.STEPS[step](once=True)

@@ -31,11 +31,24 @@ def _segmentation(*, once: bool) -> None:
     bootstrap.run_worker(once=once)
 
 
+def _enrichment(*, once: bool) -> None:
+    # Imported on dispatch: the step's extra (faster-whisper) is needed only to run it.
+    try:
+        from scene_rag.extraction.enrichment import bootstrap
+    except ImportError as exc:
+        raise RuntimeError(
+            f"The enrichment step cannot be imported: {exc}. "
+            "Install its extra with `pdm install -G enrichment`."
+        ) from exc
+    bootstrap.run_worker(once=once)
+
+
 # Each step's bootstrap is imported inside its runner, so a role process loads only the
 # step it runs and the dependencies that step needs.
 STEPS: Final[Mapping[str, StepRunner]] = {
     "ingestion": _ingestion,
     "segmentation": _segmentation,
+    "enrichment": _enrichment,
 }
 
 

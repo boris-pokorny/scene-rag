@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/extraction/internal/enrichment.schema.json",
+  "title": "Enrichment",
+  "description": "One document of the Enrichment Store (collection enrichments): what one enricher produced for one scene of one scene set, under one fingerprint. Written only by the enrichment step; read by the scene-catalog role of the extraction service. An empty segments array is a valid output: the scene offered the enricher nothing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_id", "schema_version", "scene_set_version", "asset_version", "scene_index", "enricher",
+    "classification", "model", "segments", "created_at", "lineage"
+  ],
+  "properties": {
+    "_id": {
+      "description": "Data version of the record: hash(scene set version + scene index + enricher + fingerprint).",
+      "$ref": "#/$defs/version"
+    },
+    "schema_version": { "const": 1 },
+    "scene_set_version": {
+      "description": "Data version of the scene set the scene belongs to (Scene Store _id).",
+      "$ref": "#/$defs/version"
+    },
+    "asset_version": {
+      "description": "Content hash of the asset version (Asset Registry _id), denormalised for liveness and purge queries.",
+      "$ref": "#/$defs/version"
+    },
+    "scene_index": { "type": "integer", "minimum": 0 },
+    "enricher": {
+      "description": "Name of the enricher: 'description', 'transcript', or a later one.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "classification": {
+      "description": "Data classification of the text the enricher produces.",
+      "type": "string",
+      "minLength": 1
+    },
+    "model": {
+      "description": "The model that produced the segments, pinned by digest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "digest"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/version" }
+      }
+    },
+    "segments": {
+      "description": "Semantic segments in stream order; empty when the scene gave the enricher nothing.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/segment" }
+    },
+    "created_at": { "$ref": "#/$defs/datetime" },
+    "lineage": { "$ref": "#/$defs/lineage" }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "datetime": {
+      "description": "UTC timestamp. Stored as a BSON date; rendered as RFC 3339 in JSON samples.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "segment": {
+      "description": "A span of the scene, in stream seconds, with the text attributed to it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_seconds", "end_seconds", "text", "language", "confidence"],
+      "properties": {
+        "start_seconds": { "type": "number", "minimum": 0 },
+        "end_seconds": { "type": "number", "minimum": 0 },
+        "text": { "type": "string", "minLength": 1 },
+        "language": {
+          "description": "Language code of the text, when the enricher detects one.",
+          "type": ["string", "null"]
+        },
+        "confidence": {
+          "description": "The enricher's confidence in the text, when it reports one.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "fingerprint", "inputs", "version", "image"],
+      "properties": {
+        "step": { "const": "enrichment" },
+        "fingerprint": {
+          "description": "Fingerprint of the enricher: its hyperparameters, output-defining code and model digest.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{12}$"
+        },
+        "inputs": {
+          "description": "Data versions read: the scene set first, then every derivative the enricher read.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^(scene-set|derivative):[a-z0-9_]+:[0-9a-f]+$" }
+        },
+        "version": { "$ref": "#/$defs/version" },
+        "image": {
+          "description": "Digest of the service image, when known.",
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

@@ -9,6 +9,7 @@ from pymongo.errors import PyMongoError
 
 from scene_rag.extraction.ingestion.registry import Document
 from scene_rag.extraction.ingestion.settings import REGISTRY_URI_ENV
+from tests.support.enrichment_fakes import EnrichmentHarness, make_enrichment_harness
 from tests.support.fakes import FakeAssetRegistry, Harness, make_harness
 from tests.support.segmentation_fakes import SegmentationHarness, make_segmentation_harness
 
@@ -37,6 +38,16 @@ def segmentation_harness() -> SegmentationHarness:
     requesting it by the same name, to seed state before its cases run.
     """
     return make_segmentation_harness()
+
+
+@pytest.fixture
+def enrichment_harness() -> EnrichmentHarness:
+    """An enrichment service wired to fresh fakes over empty stores.
+
+    Tests seed scene sets with `enrichment_harness.seed(...)`; a class may override this
+    fixture, requesting it by the same name, to seed state before its cases run.
+    """
+    return make_enrichment_harness()
 
 
 @pytest.fixture(scope="session")

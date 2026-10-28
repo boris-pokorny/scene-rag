@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import threading
 import wave
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
@@ -32,7 +32,9 @@ class FakeRunner:
     """CommandRunner returning canned results per invocation; records commands.
 
     An extraction command (one with an output file, the last argument) writes ``content``
-    there when it succeeds, as ffmpeg would.
+    there when it succeeds, as ffmpeg would. ``results`` are consumed in call order, which is
+    deterministic only on a serial dispatcher; ``failing`` keys a result by the output file's
+    name instead, so it lands on the same clip under any scheduling.
     """
 
     def __init__(
@@ -40,10 +42,12 @@ class FakeRunner:
         results: Sequence[tuple[int, str]] = (),
         content: bytes = SAMPLES,
         meet: threading.Barrier | None = None,
+        failing: Mapping[str, tuple[int, str]] | None = None,
     ) -> None:
         self._results = list(results)
         self._content = content
         self._meet = meet
+        self._failing = dict(failing or {})
         self._lock = threading.Lock()
         self.gauge = ConcurrencyGauge()
         self.commands: list[list[str]] = []
@@ -53,6 +57,8 @@ class FakeRunner:
             self.commands.append(list(command))
             code, stderr = self._results.pop(0) if self._results else (0, "")
         extraction = command[-1].endswith(".wav")
+        if extraction and Path(command[-1]).name in self._failing:
+            code, stderr = self._failing[Path(command[-1]).name]
         self.gauge.enter()
         try:
             if extraction and self._meet is not None:
@@ -174,7 +180,7 @@ class TestGivenThreadDispatcher:
         )
 
     def test_when_one_extraction_fails_then_raises_naming_its_clip(self, tmp_path: Path) -> None:
-        runner = FakeRunner([(0, ""), (0, ""), (1, "Error while decoding stream"), (0, "")])
+        runner = FakeRunner(failing={"scene_002.wav": (1, "Error while decoding stream")})
 
         with (
             ThreadDispatcher(2) as threads,

@@ -14,6 +14,7 @@ PRESENT_STEPS = sorted(step for step in STEPS if (SERVICE / step).is_dir())
 STORE_BACKENDS = {
     "ingestion": {"registry.py"},
     "segmentation": {"asset_registry.py", "scene_store.py"},
+    "enrichment": {"asset_registry.py", "scene_store.py", "enrichment_store.py"},
 }
 # Per step: the write side other steps and roles must never import.
 WRITER_SIDE = {
@@ -26,12 +27,18 @@ WRITER_SIDE = {
         "scene_rag.extraction.segmentation.scene_store",
         "scene_rag.extraction.segmentation.derivative_store",
     },
+    "enrichment": {
+        "scene_rag.extraction.enrichment.protocols.EnrichmentStoreWriter",
+        "scene_rag.extraction.enrichment.enrichment_store",
+    },
 }
-# Third-party tools confined to one module of one step.
+# Tools confined to one module of one step: a package, or a module within one.
 CONFINED_TOOLS = {
     "scenedetect": "segmentation/scenedetect_backend.py",
     "cv2": "segmentation/scenedetect_backend.py",
     "subprocess": "segmentation/ffmpeg_backend.py",
+    "faster_whisper": "enrichment/whisper_loader.py",
+    "urllib.request": "enrichment/ollama_transport.py",
 }
 
 
@@ -147,8 +154,9 @@ class TestGivenServiceModules:
 
     @pytest.mark.parametrize("module", ALL_MODULES, ids=module_id)
     def test_when_not_designated_backend_then_no_confined_tool_import(self, module: Path) -> None:
-        roots = {name.split(".")[0] for name in imported_names(module)}
+        names = imported_names(module)
         for tool, allowed in CONFINED_TOOLS.items():
             if module_id(module) == allowed:
                 continue
-            assert tool not in roots, f"{module_id(module)} imports {tool}; only {allowed} may"
+            offending = {n for n in names if n == tool or n.startswith(tool + ".")}
+            assert not offending, f"{module_id(module)} imports {tool}; only {allowed} may"

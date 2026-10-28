@@ -15,6 +15,9 @@ segmentation = [
     "scenedetect>=0.7.1",
     "opencv-python-headless>=4.10",
 ]
+enrichment = [
+    "faster-whisper>=1.1",
+]
 
 [dependency-groups]
 dev = [
@@ -72,7 +75,14 @@ explicit_package_bases = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["jsonschema", "jsonschema.*", "scenedetect", "scenedetect.*"]
+module = [
+    "jsonschema",
+    "jsonschema.*",
+    "scenedetect",
+    "scenedetect.*",
+    "faster_whisper",
+    "faster_whisper.*",
+]
 ignore_missing_imports = true
 
 [tool.coverage.run]
@@ -89,4 +99,5 @@ skip_covered = true
 testpaths = ["tests"]
 markers = [
     "integration: needs a reachable MongoDB at SCENE_RAG_EXTRACTION_REGISTRY_URI or ffmpeg on PATH",
+    "models: needs local models (Ollama, Whisper); opt in with SCENE_RAG_EXTRACTION_TEST_MODELS=1",
 ]

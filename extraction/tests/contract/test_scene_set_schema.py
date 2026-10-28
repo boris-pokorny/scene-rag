@@ -45,3 +45,23 @@ class TestGivenSchema:
         assert record.version == SAMPLE["_id"]
         assert record.lineage.step == "segmentation"
         assert as_json(to_document(record)) == SAMPLE
+
+
+class TestGivenSampleReadByEnrichment:
+    """The consumer step decodes the producer's sample through its own view."""
+
+    def test_when_decoded_then_scenes_and_derivatives_visible(self) -> None:
+        from scene_rag.extraction.enrichment.scene_store import scene_set_from_document
+
+        view = scene_set_from_document(dict(SAMPLE))
+
+        assert view.version == SAMPLE["_id"]
+        assert view.asset_version == SAMPLE["asset_version"]
+        assert [scene.index for scene in view.scenes] == [0, 1]
+        assert len(view.scenes[0].keyframes) == 2
+        assert (
+            view.scenes[0].keyframes[0].derivative.digest
+            == (SAMPLE["scenes"][0]["keyframes"][0]["derivative"]["digest"])
+        )
+        assert view.scenes[1].audio_clip is not None
+        assert view.scenes[1].audio_clip.media_type == "audio/wav"
