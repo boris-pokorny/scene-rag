@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/extraction/published/scene-set-summary.schema.json",
+  "title": "SceneSetSummary",
+  "description": "One scene set as the scene-api lists it: its versions, size and, per enricher and fingerprint, how many of its scenes have a record. A coverage entry is complete when every scene has one; consumers pin the fingerprints they accept and list only sets complete under them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "asset_version",
+    "segmentation_fingerprint",
+    "scene_count",
+    "created_at",
+    "live",
+    "enrichments"
+  ],
+  "properties": {
+    "version": {
+      "description": "Data version of the scene set: hash(asset version + segmentation fingerprint).",
+      "$ref": "#/$defs/version"
+    },
+    "asset_version": {
+      "$ref": "#/$defs/version"
+    },
+    "segmentation_fingerprint": {
+      "$ref": "#/$defs/fingerprint"
+    },
+    "scene_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "description": "UTC timestamp, RFC 3339 with a 'Z' suffix.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "live": {
+      "type": "boolean"
+    },
+    "enrichments": {
+      "description": "Coverage per (enricher, fingerprint), sorted; every fingerprint with at least one record.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enricher",
+          "fingerprint",
+          "scene_count",
+          "complete"
+        ],
+        "properties": {
+          "enricher": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "fingerprint": {
+            "$ref": "#/$defs/fingerprint"
+          },
+          "scene_count": {
+            "description": "Scenes of the set with a record under this fingerprint.",
+            "type": "integer",
+            "minimum": 1
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "fingerprint": {
+      "description": "Step or enricher fingerprint: twelve hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    }
+  }
+}

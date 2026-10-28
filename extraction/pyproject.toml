@@ -1,7 +1,7 @@
 [project]
 name = "scene-rag-extraction"
 version = "0.1.0"
-description = "scene-rag extraction service: ingestion, segmentation and enrichment steps; scene-catalog role"
+description = "scene-rag extraction service: ingestion, segmentation and enrichment steps; scene-api role"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.14"
@@ -18,6 +18,11 @@ segmentation = [
 enrichment = [
     "faster-whisper>=1.1",
 ]
+# Per-role extras, on the same footing: the scene-api role needs its HTTP framework.
+scene-api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
 
 [dependency-groups]
 dev = [
@@ -27,6 +32,7 @@ dev = [
     "jsonschema>=4",
     "hypothesis>=6",
     "pytest-cov>=6",
+    "httpx>=0.27",
 ]
 
 [build-system]
@@ -50,6 +56,8 @@ test = "pytest --cov"
 # Only the MongoDB and ffmpeg cases; a subset cannot meet the coverage threshold, so no coverage here.
 test-integration = "pytest -m integration --no-cov"
 worker = "python -m scene_rag.extraction worker"
+scene-api = "python -m scene_rag.extraction scene-api"
+openapi = "python -m scene_rag.extraction.scene_api.openapi"
 
 [tool.ruff]
 line-length = 100

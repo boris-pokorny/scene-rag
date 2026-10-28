@@ -113,3 +113,6 @@ class TestGivenMongoCollection:
             mongo_client.drop_database(database)
 
         assert (("lineage.fingerprint", 1), ("asset_version", 1)) in keys
+        assert (("asset_version", 1),) in keys
+        assert (("scenes.keyframes.derivative.digest", 1),) in keys
+        assert (("scenes.audio_clip.digest", 1),) in keys

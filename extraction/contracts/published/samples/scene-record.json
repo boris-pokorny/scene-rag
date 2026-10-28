@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "version": "sha256:63f3b42173c70a228702f3c7438d5a93db71290e34650639470adf4622f3c908",
+  "scene_set_version": "sha256:37c9ff2cbfb0890ef9c3f4963b1dbcb109d2f8f65a50db3a043cee8c76cbe7e1",
+  "asset_version": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "segmentation_fingerprint": "3b9e1f6a2c40",
+  "live": true,
+  "asset": {
+    "media_type": "video/mp4",
+    "size_bytes": 21745263,
+    "entitlements": [
+      "public",
+      "team-platform"
+    ],
+    "sources": [
+      {
+        "source_id": "local",
+        "asset_id": "asset-3fa85f64d1a2b3c4",
+        "filename": "sample-30s.mp4"
+      },
+      {
+        "source_id": "library",
+        "asset_id": "asset-0123456789abcdef",
+        "filename": "talk.mp4"
+      }
+    ]
+  },
+  "media": {
+    "duration_seconds": 16.058,
+    "frame_rate": 23.976023976023978,
+    "width": 1280,
+    "height": 720,
+    "frame_count": 385
+  },
+  "scene": {
+    "index": 0,
+    "start_seconds": 0.0,
+    "end_seconds": 13.347,
+    "start_frame": 0,
+    "end_frame": 320,
+    "keyframes": [
+      {
+        "digest": "sha256:6ab9f1eb8f7d3388f4f9d586f66e99fd54080df2c446f0e58668b09c08a16dd0",
+        "media_type": "image/jpeg",
+        "size_bytes": 206602,
+        "url": "/derivatives/sha256:6ab9f1eb8f7d3388f4f9d586f66e99fd54080df2c446f0e58668b09c08a16dd0",
+        "frame": 12,
+        "seconds": 0.5005
+      },
+      {
+        "digest": "sha256:015f7e6bc5aeaf483724089e9252cc13b50951a6b69412522765cff4d780306e",
+        "media_type": "image/jpeg",
+        "size_bytes": 198311,
+        "url": "/derivatives/sha256:015f7e6bc5aeaf483724089e9252cc13b50951a6b69412522765cff4d780306e",
+        "frame": 296,
+        "seconds": 12.3457
+      }
+    ],
+    "audio_clip": {
+      "digest": "sha256:f55ff16f66f43360266b95db6f8fec01d76031054306ae4a4b380598f6cfd114",
+      "media_type": "audio/wav",
+      "size_bytes": 427150,
+      "url": "/derivatives/sha256:f55ff16f66f43360266b95db6f8fec01d76031054306ae4a4b380598f6cfd114"
+    }
+  },
+  "enrichments": [
+    {
+      "version": "sha256:4d1f0a7e2b9c8d3e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e",
+      "enricher": "transcript",
+      "fingerprint": "e41a9c27b0d5",
+      "classification": "internal",
+      "model": {
+        "name": "small",
+        "digest": "sha256:0c7e9d2a4b6f8e1d3c5a7b9f0e2d4c6a8b0f1e3d5c7a9b1d3f5e7a9c1b3d5f7e"
+      },
+      "segments": [
+        {
+          "start_seconds": 0.42,
+          "end_seconds": 6.18,
+          "text": "Welcome back. Today we look at how the pipeline cuts a video into scenes.",
+          "language": "en",
+          "confidence": 0.91
+        },
+        {
+          "start_seconds": 6.9,
+          "end_seconds": 13.347,
+          "text": "Each scene gets its keyframes and an audio clip of its own.",
+          "language": "en",
+          "confidence": 0.88
+        }
+      ]
+    }
+  ]
+}

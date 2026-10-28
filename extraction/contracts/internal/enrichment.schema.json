@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://scene-rag.example/extraction/internal/enrichment.schema.json",
   "title": "Enrichment",
-  "description": "One document of the Enrichment Store (collection enrichments): what one enricher produced for one scene of one scene set, under one fingerprint. Written only by the enrichment step; read by the scene-catalog role of the extraction service. An empty segments array is a valid output: the scene offered the enricher nothing.",
+  "description": "One document of the Enrichment Store (collection enrichments): what one enricher produced for one scene of one scene set, under one fingerprint. Written only by the enrichment step; read by the scene-api role of the extraction service. An empty segments array is a valid output: the scene offered the enricher nothing.",
   "type": "object",
   "additionalProperties": false,
   "required": [

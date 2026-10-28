@@ -147,12 +147,17 @@ class MongoSceneStore:
         """Bind to ``database`` on ``client`` and ensure the indexes exist.
 
         The compound ``(lineage.fingerprint, asset_version)`` index serves
-        `list_asset_versions` directly.
+        `list_asset_versions` directly. The others serve the scene-api role, which reads this
+        collection but, as a reader, creates no index: listing an asset version's sets, and
+        finding the set that references a derivative by its digest.
         """
         self._collection = client[database][COLLECTION]
         self._collection.create_index(
             [("lineage.fingerprint", ASCENDING), ("asset_version", ASCENDING)]
         )
+        self._collection.create_index([("asset_version", ASCENDING)])
+        self._collection.create_index([("scenes.keyframes.derivative.digest", ASCENDING)])
+        self._collection.create_index([("scenes.audio_clip.digest", ASCENDING)])
 
     def get(self, version: str) -> models.SceneSet | None:
         """Return the scene set with the given data version."""

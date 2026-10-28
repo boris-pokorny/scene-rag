@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/extraction/published/scene-record.schema.json",
+  "title": "SceneRecord",
+  "description": "One scene of one scene set with its enrichments, as the scene-api of the extraction service publishes it. Everything a consumer needs to build a chunk is denormalised in: the asset version with its entitlements and source ids, the media properties, the scene with its derivative references, and the enrichments. The record's version is hash(scene set version + scene index + sorted enrichment versions), so it changes exactly when the enrichments included change; the scene set version and the enrichment versions are its inputs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "version",
+    "scene_set_version",
+    "asset_version",
+    "segmentation_fingerprint",
+    "live",
+    "asset",
+    "media",
+    "scene",
+    "enrichments"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "version": {
+      "description": "Data version of the record: hash(scene set version + scene index + sorted enrichment versions).",
+      "$ref": "#/$defs/version"
+    },
+    "scene_set_version": {
+      "$ref": "#/$defs/version"
+    },
+    "asset_version": {
+      "description": "Content hash of the asset the scene was cut from.",
+      "$ref": "#/$defs/version"
+    },
+    "segmentation_fingerprint": {
+      "description": "Fingerprint of the segmentation run that cut the scene set.",
+      "$ref": "#/$defs/fingerprint"
+    },
+    "live": {
+      "description": "Whether a source still holds the asset version; false means the record is awaiting purge.",
+      "type": "boolean"
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entitlements",
+        "media_type",
+        "size_bytes",
+        "sources"
+      ],
+      "properties": {
+        "media_type": {
+          "type": "string",
+          "pattern": "^[a-z]+/[A-Za-z0-9.+-]+$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entitlements": {
+          "description": "Union of the entitlements of every source holding the version, sorted. Empty once retired.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "sources": {
+          "description": "Source references currently holding the version. Empty once retired.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        }
+      }
+    },
+    "media": {
+      "$ref": "#/$defs/media"
+    },
+    "scene": {
+      "$ref": "#/$defs/scene"
+    },
+    "enrichments": {
+      "description": "Sorted by (enricher, fingerprint); only the pinned ones when the request pinned enrichments.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/enrichment"
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "fingerprint": {
+      "description": "Step or enricher fingerprint: twelve hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "source": {
+      "description": "One source system's reference to the asset version; the connector's location is internal and not published.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "asset_id",
+        "filename"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asset_id": {
+          "description": "Stable identifier of the item within its source; survives content changes.",
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "duration_seconds",
+        "frame_rate",
+        "width",
+        "height",
+        "frame_count"
+      ],
+      "properties": {
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "frame_rate": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frame_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "derivative": {
+      "description": "A keyframe or audio clip, addressed by content; its bytes are served at `url`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "media_type",
+        "size_bytes",
+        "url"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/version"
+        },
+        "media_type": {
+          "type": "string",
+          "enum": [
+            "image/jpeg",
+            "audio/wav"
+          ]
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "url": {
+          "description": "Path of the bytes on the scene-api, relative to its base URL.",
+          "type": "string",
+          "pattern": "^/derivatives/[a-z0-9_]+:[0-9a-f]+$"
+        }
+      }
+    },
+    "keyframe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "media_type",
+        "size_bytes",
+        "url",
+        "frame",
+        "seconds"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/version"
+        },
+        "media_type": {
+          "type": "string",
+          "enum": [
+            "image/jpeg",
+            "audio/wav"
+          ]
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "url": {
+          "description": "Path of the bytes on the scene-api, relative to its base URL.",
+          "type": "string",
+          "pattern": "^/derivatives/[a-z0-9_]+:[0-9a-f]+$"
+        },
+        "frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "scene": {
+      "description": "The scene's span of the asset; the frame span is [start_frame, end_frame).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "start_seconds",
+        "end_seconds",
+        "start_frame",
+        "end_frame",
+        "keyframes",
+        "audio_clip"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "start_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "keyframes": {
+          "description": "Rendered frames in stream order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/keyframe"
+          }
+        },
+        "audio_clip": {
+          "description": "null when the asset has no audio stream or the scene is empty.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/derivative"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "segment": {
+      "description": "A span of the scene, in stream seconds, with the text attributed to it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_seconds",
+        "end_seconds",
+        "text",
+        "language",
+        "confidence"
+      ],
+      "properties": {
+        "start_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "enrichment": {
+      "description": "What one enricher produced for the scene under one fingerprint. Empty segments are a valid output.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "enricher",
+        "fingerprint",
+        "classification",
+        "model",
+        "segments"
+      ],
+      "properties": {
+        "version": {
+          "description": "Data version of the enrichment record.",
+          "$ref": "#/$defs/version"
+        },
+        "enricher": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        },
+        "classification": {
+          "description": "Data classification of the text.",
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "digest"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "digest": {
+              "$ref": "#/$defs/version"
+            }
+          }
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/segment"
+          }
+        }
+      }
+    }
+  }
+}

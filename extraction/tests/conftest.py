@@ -11,6 +11,7 @@ from scene_rag.extraction.ingestion.registry import Document
 from scene_rag.extraction.ingestion.settings import REGISTRY_URI_ENV
 from tests.support.enrichment_fakes import EnrichmentHarness, make_enrichment_harness
 from tests.support.fakes import FakeAssetRegistry, Harness, make_harness
+from tests.support.scene_api_fakes import SceneApiHarness, make_scene_api_harness
 from tests.support.segmentation_fakes import SegmentationHarness, make_segmentation_harness
 
 
@@ -48,6 +49,16 @@ def enrichment_harness() -> EnrichmentHarness:
     fixture, requesting it by the same name, to seed state before its cases run.
     """
     return make_enrichment_harness()
+
+
+@pytest.fixture
+def scene_api_harness() -> SceneApiHarness:
+    """A scene catalog service wired to fresh fakes over empty stores.
+
+    Tests seed scene sets with `scene_api_harness.seed(...)`; a class may override this fixture,
+    requesting it by the same name, to seed state before its cases run.
+    """
+    return make_scene_api_harness()
 
 
 @pytest.fixture(scope="session")

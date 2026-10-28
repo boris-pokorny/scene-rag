@@ -1,0 +1,23 @@
+{
+  "version": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "live": true,
+  "retired_at": null,
+  "media_type": "video/mp4",
+  "size_bytes": 21745263,
+  "entitlements": [
+    "public",
+    "team-platform"
+  ],
+  "sources": [
+    {
+      "source_id": "local",
+      "asset_id": "asset-3fa85f64d1a2b3c4",
+      "filename": "sample-30s.mp4"
+    },
+    {
+      "source_id": "library",
+      "asset_id": "asset-0123456789abcdef",
+      "filename": "talk.mp4"
+    }
+  ]
+}

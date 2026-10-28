@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/extraction/published/page.schema.json",
+  "title": "Page",
+  "description": "One page of a listing. `next` is the cursor of the following page, or null on the last one. A page may hold fewer items than asked for, even none, while `next` is not null: filtering happens after the cursor is advanced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items",
+    "next"
+  ],
+  "properties": {
+    "items": {
+      "type": "array"
+    },
+    "next": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

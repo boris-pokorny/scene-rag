@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://scene-rag.example/extraction/internal/asset-version.schema.json",
   "title": "AssetVersion",
-  "description": "One document of the Asset Registry (collection asset_versions): an immutable asset version identified by its content hash, with every source reference that currently holds it. Written only by the ingestion step; read by sibling steps and the scene-catalog role of the extraction service.",
+  "description": "One document of the Asset Registry (collection asset_versions): an immutable asset version identified by its content hash, with every source reference that currently holds it. Written only by the ingestion step; read by sibling steps and the scene-api role of the extraction service.",
   "type": "object",
   "additionalProperties": false,
   "required": ["_id", "schema_version", "media_type", "size_bytes", "sources", "first_seen_at", "lineage", "retired_at"],

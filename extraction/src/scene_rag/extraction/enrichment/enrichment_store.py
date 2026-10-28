@@ -100,7 +100,7 @@ class MongoEnrichmentStore:
 
         The compound ``(enricher, lineage.fingerprint, scene_set_version, scene_index)`` index
         serves `list_done` directly; ``asset_version`` and ``scene_set_version`` serve the
-        liveness, purge and catalog queries the contract promises consumers.
+        liveness, purge and scene-api queries the contract promises consumers.
         """
         self._collection = client[database][COLLECTION]
         self._collection.create_index(

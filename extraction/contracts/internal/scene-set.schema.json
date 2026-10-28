@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://scene-rag.example/extraction/internal/scene-set.schema.json",
   "title": "SceneSet",
-  "description": "One document of the Scene Store (collection scene_sets): one asset version's scenes from one segmentation run, with references to its keyframes and audio clips in the Derivative Store. Written only by the segmentation step; read by the enrichment step and the scene-catalog role of the extraction service.",
+  "description": "One document of the Scene Store (collection scene_sets): one asset version's scenes from one segmentation run, with references to its keyframes and audio clips in the Derivative Store. Written only by the segmentation step; read by the enrichment step and the scene-api role of the extraction service.",
   "type": "object",
   "additionalProperties": false,
   "required": ["_id", "schema_version", "asset_version", "media", "scenes", "created_at", "lineage"],

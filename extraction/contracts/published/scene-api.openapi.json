@@ -1,0 +1,1210 @@
+{
+  "components": {
+    "schemas": {
+      "AssetVersion": {
+        "$defs": {
+          "source": {
+            "additionalProperties": false,
+            "description": "One source system's reference to the asset version; the connector's location is internal and not published.",
+            "properties": {
+              "asset_id": {
+                "description": "Stable identifier of the item within its source; survives content changes.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "filename": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "source_id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_id",
+              "asset_id",
+              "filename"
+            ],
+            "type": "object"
+          },
+          "version": {
+            "description": "Content hash: '<algorithm>:<hex digest>'.",
+            "pattern": "^[a-z0-9_]+:[0-9a-f]+$",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One asset version as the scene-api publishes it: liveness, entitlements and source ids. Served for retired versions too, so a consumer can confirm a purge.",
+        "properties": {
+          "entitlements": {
+            "description": "Union of the entitlements of every source holding the version, sorted. Empty once retired.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "live": {
+            "type": "boolean"
+          },
+          "media_type": {
+            "pattern": "^[a-z]+/[A-Za-z0-9.+-]+$",
+            "type": "string"
+          },
+          "retired_at": {
+            "description": "When the last source reference was removed; null while live.",
+            "oneOf": [
+              {
+                "description": "UTC timestamp, RFC 3339 with a 'Z' suffix.",
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size_bytes": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sources": {
+            "description": "Source references currently holding the version. Empty once retired.",
+            "items": {
+              "$ref": "#/components/schemas/AssetVersion/$defs/source"
+            },
+            "type": "array"
+          },
+          "version": {
+            "$ref": "#/components/schemas/AssetVersion/$defs/version"
+          }
+        },
+        "required": [
+          "version",
+          "live",
+          "retired_at",
+          "entitlements",
+          "media_type",
+          "size_bytes",
+          "sources"
+        ],
+        "title": "AssetVersion",
+        "type": "object"
+      },
+      "Error": {
+        "additionalProperties": false,
+        "description": "The body of every non-2xx answer of the scene-api.",
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "not_found",
+                  "invalid_parameter",
+                  "method_not_allowed",
+                  "derivative_unavailable",
+                  "internal_error"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "Error",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "Page": {
+        "additionalProperties": false,
+        "description": "One page of a listing. `next` is the cursor of the following page, or null on the last one. A page may hold fewer items than asked for, even none, while `next` is not null: filtering happens after the cursor is advanced.",
+        "properties": {
+          "items": {
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next"
+        ],
+        "title": "Page",
+        "type": "object"
+      },
+      "PageOfSceneRecord": {
+        "additionalProperties": false,
+        "description": "One page of a listing. `next` is the cursor of the following page, or null on the last one. A page may hold fewer items than asked for, even none, while `next` is not null: filtering happens after the cursor is advanced.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SceneRecord"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next"
+        ],
+        "title": "PageOfSceneRecord",
+        "type": "object"
+      },
+      "PageOfSceneSetSummary": {
+        "additionalProperties": false,
+        "description": "One page of a listing. `next` is the cursor of the following page, or null on the last one. A page may hold fewer items than asked for, even none, while `next` is not null: filtering happens after the cursor is advanced.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SceneSetSummary"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next"
+        ],
+        "title": "PageOfSceneSetSummary",
+        "type": "object"
+      },
+      "SceneRecord": {
+        "$defs": {
+          "derivative": {
+            "additionalProperties": false,
+            "description": "A keyframe or audio clip, addressed by content; its bytes are served at `url`.",
+            "properties": {
+              "digest": {
+                "$ref": "#/components/schemas/SceneRecord/$defs/version"
+              },
+              "media_type": {
+                "enum": [
+                  "image/jpeg",
+                  "audio/wav"
+                ],
+                "type": "string"
+              },
+              "size_bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "url": {
+                "description": "Path of the bytes on the scene-api, relative to its base URL.",
+                "pattern": "^/derivatives/[a-z0-9_]+:[0-9a-f]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "digest",
+              "media_type",
+              "size_bytes",
+              "url"
+            ],
+            "type": "object"
+          },
+          "enrichment": {
+            "additionalProperties": false,
+            "description": "What one enricher produced for the scene under one fingerprint. Empty segments are a valid output.",
+            "properties": {
+              "classification": {
+                "description": "Data classification of the text.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "enricher": {
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "fingerprint": {
+                "$ref": "#/components/schemas/SceneRecord/$defs/fingerprint"
+              },
+              "model": {
+                "additionalProperties": false,
+                "properties": {
+                  "digest": {
+                    "$ref": "#/components/schemas/SceneRecord/$defs/version"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "digest"
+                ],
+                "type": "object"
+              },
+              "segments": {
+                "items": {
+                  "$ref": "#/components/schemas/SceneRecord/$defs/segment"
+                },
+                "type": "array"
+              },
+              "version": {
+                "$ref": "#/components/schemas/SceneRecord/$defs/version",
+                "description": "Data version of the enrichment record."
+              }
+            },
+            "required": [
+              "version",
+              "enricher",
+              "fingerprint",
+              "classification",
+              "model",
+              "segments"
+            ],
+            "type": "object"
+          },
+          "fingerprint": {
+            "description": "Step or enricher fingerprint: twelve hex digits.",
+            "pattern": "^[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "keyframe": {
+            "additionalProperties": false,
+            "properties": {
+              "digest": {
+                "$ref": "#/components/schemas/SceneRecord/$defs/version"
+              },
+              "frame": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "media_type": {
+                "enum": [
+                  "image/jpeg",
+                  "audio/wav"
+                ],
+                "type": "string"
+              },
+              "seconds": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "size_bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "url": {
+                "description": "Path of the bytes on the scene-api, relative to its base URL.",
+                "pattern": "^/derivatives/[a-z0-9_]+:[0-9a-f]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "digest",
+              "media_type",
+              "size_bytes",
+              "url",
+              "frame",
+              "seconds"
+            ],
+            "type": "object"
+          },
+          "media": {
+            "additionalProperties": false,
+            "properties": {
+              "duration_seconds": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "frame_count": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "frame_rate": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "height": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "width": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "duration_seconds",
+              "frame_rate",
+              "width",
+              "height",
+              "frame_count"
+            ],
+            "type": "object"
+          },
+          "scene": {
+            "additionalProperties": false,
+            "description": "The scene's span of the asset; the frame span is [start_frame, end_frame).",
+            "properties": {
+              "audio_clip": {
+                "description": "null when the asset has no audio stream or the scene is empty.",
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SceneRecord/$defs/derivative"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "end_frame": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "end_seconds": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "index": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "keyframes": {
+                "description": "Rendered frames in stream order.",
+                "items": {
+                  "$ref": "#/components/schemas/SceneRecord/$defs/keyframe"
+                },
+                "type": "array"
+              },
+              "start_frame": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "start_seconds": {
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "index",
+              "start_seconds",
+              "end_seconds",
+              "start_frame",
+              "end_frame",
+              "keyframes",
+              "audio_clip"
+            ],
+            "type": "object"
+          },
+          "segment": {
+            "additionalProperties": false,
+            "description": "A span of the scene, in stream seconds, with the text attributed to it.",
+            "properties": {
+              "confidence": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "end_seconds": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "language": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "start_seconds": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "text": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "start_seconds",
+              "end_seconds",
+              "text",
+              "language",
+              "confidence"
+            ],
+            "type": "object"
+          },
+          "source": {
+            "additionalProperties": false,
+            "description": "One source system's reference to the asset version; the connector's location is internal and not published.",
+            "properties": {
+              "asset_id": {
+                "description": "Stable identifier of the item within its source; survives content changes.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "filename": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "source_id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_id",
+              "asset_id",
+              "filename"
+            ],
+            "type": "object"
+          },
+          "version": {
+            "description": "Content hash: '<algorithm>:<hex digest>'.",
+            "pattern": "^[a-z0-9_]+:[0-9a-f]+$",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One scene of one scene set with its enrichments, as the scene-api of the extraction service publishes it. Everything a consumer needs to build a chunk is denormalised in: the asset version with its entitlements and source ids, the media properties, the scene with its derivative references, and the enrichments. The record's version is hash(scene set version + scene index + sorted enrichment versions), so it changes exactly when the enrichments included change; the scene set version and the enrichment versions are its inputs.",
+        "properties": {
+          "asset": {
+            "additionalProperties": false,
+            "properties": {
+              "entitlements": {
+                "description": "Union of the entitlements of every source holding the version, sorted. Empty once retired.",
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "media_type": {
+                "pattern": "^[a-z]+/[A-Za-z0-9.+-]+$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sources": {
+                "description": "Source references currently holding the version. Empty once retired.",
+                "items": {
+                  "$ref": "#/components/schemas/SceneRecord/$defs/source"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "entitlements",
+              "media_type",
+              "size_bytes",
+              "sources"
+            ],
+            "type": "object"
+          },
+          "asset_version": {
+            "$ref": "#/components/schemas/SceneRecord/$defs/version",
+            "description": "Content hash of the asset the scene was cut from."
+          },
+          "enrichments": {
+            "description": "Sorted by (enricher, fingerprint); only the pinned ones when the request pinned enrichments.",
+            "items": {
+              "$ref": "#/components/schemas/SceneRecord/$defs/enrichment"
+            },
+            "type": "array"
+          },
+          "live": {
+            "description": "Whether a source still holds the asset version; false means the record is awaiting purge.",
+            "type": "boolean"
+          },
+          "media": {
+            "$ref": "#/components/schemas/SceneRecord/$defs/media"
+          },
+          "scene": {
+            "$ref": "#/components/schemas/SceneRecord/$defs/scene"
+          },
+          "scene_set_version": {
+            "$ref": "#/components/schemas/SceneRecord/$defs/version"
+          },
+          "schema_version": {
+            "const": 1
+          },
+          "segmentation_fingerprint": {
+            "$ref": "#/components/schemas/SceneRecord/$defs/fingerprint",
+            "description": "Fingerprint of the segmentation run that cut the scene set."
+          },
+          "version": {
+            "$ref": "#/components/schemas/SceneRecord/$defs/version",
+            "description": "Data version of the record: hash(scene set version + scene index + sorted enrichment versions)."
+          }
+        },
+        "required": [
+          "schema_version",
+          "version",
+          "scene_set_version",
+          "asset_version",
+          "segmentation_fingerprint",
+          "live",
+          "asset",
+          "media",
+          "scene",
+          "enrichments"
+        ],
+        "title": "SceneRecord",
+        "type": "object"
+      },
+      "SceneSetSummary": {
+        "$defs": {
+          "fingerprint": {
+            "description": "Step or enricher fingerprint: twelve hex digits.",
+            "pattern": "^[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "version": {
+            "description": "Content hash: '<algorithm>:<hex digest>'.",
+            "pattern": "^[a-z0-9_]+:[0-9a-f]+$",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One scene set as the scene-api lists it: its versions, size and, per enricher and fingerprint, how many of its scenes have a record. A coverage entry is complete when every scene has one; consumers pin the fingerprints they accept and list only sets complete under them.",
+        "properties": {
+          "asset_version": {
+            "$ref": "#/components/schemas/SceneSetSummary/$defs/version"
+          },
+          "created_at": {
+            "description": "UTC timestamp, RFC 3339 with a 'Z' suffix.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "enrichments": {
+            "description": "Coverage per (enricher, fingerprint), sorted; every fingerprint with at least one record.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "complete": {
+                  "type": "boolean"
+                },
+                "enricher": {
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "type": "string"
+                },
+                "fingerprint": {
+                  "$ref": "#/components/schemas/SceneSetSummary/$defs/fingerprint"
+                },
+                "scene_count": {
+                  "description": "Scenes of the set with a record under this fingerprint.",
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "enricher",
+                "fingerprint",
+                "scene_count",
+                "complete"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "live": {
+            "type": "boolean"
+          },
+          "scene_count": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "segmentation_fingerprint": {
+            "$ref": "#/components/schemas/SceneSetSummary/$defs/fingerprint"
+          },
+          "version": {
+            "$ref": "#/components/schemas/SceneSetSummary/$defs/version",
+            "description": "Data version of the scene set: hash(asset version + segmentation fingerprint)."
+          }
+        },
+        "required": [
+          "version",
+          "asset_version",
+          "segmentation_fingerprint",
+          "scene_count",
+          "created_at",
+          "live",
+          "enrichments"
+        ],
+        "title": "SceneSetSummary",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Scene records of the scene-rag extraction service, for the retrieval service. Read-only.",
+    "title": "scene-rag extraction: scene-api",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/asset-versions/{version}": {
+      "get": {
+        "operationId": "get_asset_version_asset_versions__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetVersion"
+                }
+              }
+            },
+            "description": "The asset version."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          }
+        },
+        "summary": "One asset version, live or retired"
+      }
+    },
+    "/derivatives/{digest}": {
+      "get": {
+        "description": "Content-addressed, so cacheable forever; the ETag is the digest, and a request whose `If-None-Match` names it is answered 304 without reading the bytes.",
+        "operationId": "get_derivative_derivatives__digest__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "digest",
+            "required": true,
+            "schema": {
+              "title": "Digest",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "audio/wav": {},
+              "image/jpeg": {}
+            },
+            "description": "The bytes, under the media type the scene set records."
+          },
+          "304": {
+            "description": "The consumer's copy is current; no body."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The bytes cannot be read as filed."
+          }
+        },
+        "summary": "The bytes of a keyframe or audio clip"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "The process answers."
+          }
+        },
+        "summary": "Liveness of the process"
+      }
+    },
+    "/scene-sets": {
+      "get": {
+        "description": "In scene set version order, cursor-paginated: `next` is the version of the last scene set scanned, so a page may hold fewer items than asked, even none, while more follow; `next` is null only on the last page.",
+        "operationId": "list_scene_sets_scene_sets_get",
+        "parameters": [
+          {
+            "description": "Only sets cut from this asset version.",
+            "in": "query",
+            "name": "asset_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only sets cut from this asset version.",
+              "title": "Asset Version"
+            }
+          },
+          {
+            "description": "Only sets cut under this fingerprint.",
+            "in": "query",
+            "name": "segmentation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only sets cut under this fingerprint.",
+              "title": "Segmentation"
+            }
+          },
+          {
+            "description": "Enrichment pin `<enricher>:<fingerprint>`; repeatable. With pins, scene sets are listed only when complete under every pin, and records carry the pinned enrichments only. Without pins, everything is listed and included.",
+            "in": "query",
+            "name": "enrichment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Enrichment pin `<enricher>:<fingerprint>`; repeatable. With pins, scene sets are listed only when complete under every pin, and records carry the pinned enrichments only. Without pins, everything is listed and included.",
+              "title": "Enrichment"
+            }
+          },
+          {
+            "description": "The `next` of the previous page.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The `next` of the previous page.",
+              "title": "After"
+            }
+          },
+          {
+            "description": "Most items on the page; the service's page size by default and at most.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Most items on the page; the service's page size by default and at most.",
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfSceneSetSummary"
+                }
+              }
+            },
+            "description": "A page of scene set summaries."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "A parameter cannot be used as asked."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          }
+        },
+        "summary": "List scene sets of live asset versions"
+      }
+    },
+    "/scene-sets/{version}": {
+      "get": {
+        "operationId": "get_scene_set_scene_sets__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneSetSummary"
+                }
+              }
+            },
+            "description": "The scene set's summary."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          }
+        },
+        "summary": "One scene set, live or not"
+      }
+    },
+    "/scene-sets/{version}/scenes": {
+      "get": {
+        "description": "In scene index order, cursor-paginated by index: `next` is the index of the last record on the page, null on the last page.",
+        "operationId": "list_scene_records_scene_sets__version__scenes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Enrichment pin `<enricher>:<fingerprint>`; repeatable. With pins, scene sets are listed only when complete under every pin, and records carry the pinned enrichments only. Without pins, everything is listed and included.",
+            "in": "query",
+            "name": "enrichment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Enrichment pin `<enricher>:<fingerprint>`; repeatable. With pins, scene sets are listed only when complete under every pin, and records carry the pinned enrichments only. Without pins, everything is listed and included.",
+              "title": "Enrichment"
+            }
+          },
+          {
+            "description": "The `next` of the previous page: a scene index.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The `next` of the previous page: a scene index.",
+              "title": "After"
+            }
+          },
+          {
+            "description": "Most items on the page; the service's page size by default and at most.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Most items on the page; the service's page size by default and at most.",
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfSceneRecord"
+                }
+              }
+            },
+            "description": "A page of scene records."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "A parameter cannot be used as asked."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          }
+        },
+        "summary": "List the scene records of a scene set"
+      }
+    },
+    "/scene-sets/{version}/scenes/{index}": {
+      "get": {
+        "operationId": "get_scene_record_scene_sets__version__scenes__index__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "title": "Index",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Enrichment pin `<enricher>:<fingerprint>`; repeatable. With pins, scene sets are listed only when complete under every pin, and records carry the pinned enrichments only. Without pins, everything is listed and included.",
+            "in": "query",
+            "name": "enrichment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Enrichment pin `<enricher>:<fingerprint>`; repeatable. With pins, scene sets are listed only when complete under every pin, and records carry the pinned enrichments only. Without pins, everything is listed and included.",
+              "title": "Enrichment"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SceneRecord"
+                }
+              }
+            },
+            "description": "The scene record."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "A parameter cannot be used as asked."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "No such resource."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          }
+        },
+        "summary": "One scene record"
+      }
+    }
+  }
+}

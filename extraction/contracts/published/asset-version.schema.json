@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/extraction/published/asset-version.schema.json",
+  "title": "AssetVersion",
+  "description": "One asset version as the scene-api publishes it: liveness, entitlements and source ids. Served for retired versions too, so a consumer can confirm a purge.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "live",
+    "retired_at",
+    "entitlements",
+    "media_type",
+    "size_bytes",
+    "sources"
+  ],
+  "properties": {
+    "version": {
+      "$ref": "#/$defs/version"
+    },
+    "live": {
+      "type": "boolean"
+    },
+    "retired_at": {
+      "description": "When the last source reference was removed; null while live.",
+      "oneOf": [
+        {
+          "description": "UTC timestamp, RFC 3339 with a 'Z' suffix.",
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "media_type": {
+      "type": "string",
+      "pattern": "^[a-z]+/[A-Za-z0-9.+-]+$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "entitlements": {
+      "description": "Union of the entitlements of every source holding the version, sorted. Empty once retired.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "sources": {
+      "description": "Source references currently holding the version. Empty once retired.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "source": {
+      "description": "One source system's reference to the asset version; the connector's location is internal and not published.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "asset_id",
+        "filename"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asset_id": {
+          "description": "Stable identifier of the item within its source; survives content changes.",
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
