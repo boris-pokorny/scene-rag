@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/published/search-response.schema.json",
+  "title": "SearchResponse",
+  "description": "The answer to POST /search and to the search_scenes tool: the sources the caller may see, best first, and what served them. Empty when nothing matches or the caller asserted no entitlements.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sources", "served"],
+  "properties": {
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "https://scene-rag.example/retrieval/published/source.schema.json" }
+    },
+    "served": { "$ref": "https://scene-rag.example/retrieval/published/served.schema.json" }
+  }
+}

@@ -1,0 +1,510 @@
+{
+  "components": {
+    "schemas": {
+      "AnswerRequest": {
+        "additionalProperties": false,
+        "description": "The body of POST /answer: the question, how many sources the answer may draw on at most, and what narrows the search. The same shape as the search request today; a separate schema so the two may grow apart.",
+        "properties": {
+          "filters": {
+            "additionalProperties": false,
+            "description": "What narrows the search.",
+            "properties": {
+              "asset_version": {
+                "description": "Only sources of this asset version.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "question": {
+            "description": "The question, as asked; blank or longer than the served configuration allows is rejected.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "top_k": {
+            "description": "Sources wanted; the served default when absent or null, capped by the served maximum, at least one.",
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AnswerRequest",
+        "type": "object"
+      },
+      "AnswerResponse": {
+        "additionalProperties": false,
+        "description": "The answer to POST /answer and to the answer tool. `[n]` in the answer cites sources[n-1]; citations lists the numbers that name a source in order of first mention, invalid_citations those that do not. A refusal carries the configured refusal text, no citations and no usage; its sources are the spans judged too weak.",
+        "properties": {
+          "answer": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "invalid_citations": {
+            "items": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "refused": {
+            "type": "boolean"
+          },
+          "served": {
+            "$ref": "#/components/schemas/Served"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "type": "array"
+          },
+          "usage": {
+            "additionalProperties": false,
+            "description": "Tokens the generation consumed, when the model reports them; null for a refusal.",
+            "properties": {
+              "completion_tokens": {
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "prompt_tokens": {
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "prompt_tokens",
+              "completion_tokens"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "answer",
+          "refused",
+          "citations",
+          "invalid_citations",
+          "sources",
+          "usage",
+          "served"
+        ],
+        "title": "AnswerResponse",
+        "type": "object"
+      },
+      "Error": {
+        "additionalProperties": false,
+        "description": "The body of every non-2xx answer of the query-api. The MCP adapter reports the same codes as the text of a failed tool or resource call: '<code>: <message>'.",
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_parameter",
+                  "not_found",
+                  "method_not_allowed",
+                  "index_unavailable",
+                  "model_unavailable",
+                  "scene_api_unavailable",
+                  "internal_error"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "Error",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "served": {
+            "$ref": "#/components/schemas/Served"
+          },
+          "status": {
+            "const": "ok"
+          }
+        },
+        "required": [
+          "status",
+          "served"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "SearchRequest": {
+        "additionalProperties": false,
+        "description": "The body of POST /search: the question, how many sources at most, and what narrows the search.",
+        "properties": {
+          "filters": {
+            "additionalProperties": false,
+            "description": "What narrows the search.",
+            "properties": {
+              "asset_version": {
+                "description": "Only sources of this asset version.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "question": {
+            "description": "The question, as asked; blank or longer than the served configuration allows is rejected.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "top_k": {
+            "description": "Sources wanted; the served default when absent or null, capped by the served maximum, at least one.",
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "SearchRequest",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "description": "The answer to POST /search and to the search_scenes tool: the sources the caller may see, best first, and what served them. Empty when nothing matches or the caller asserted no entitlements.",
+        "properties": {
+          "served": {
+            "$ref": "#/components/schemas/Served"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources",
+          "served"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "Served": {
+        "$defs": {
+          "fingerprint": {
+            "description": "Twelve hex digits.",
+            "pattern": "^[0-9a-f]{12}$",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "What produced an answer, reported with every response so an evaluation run records exactly what it measured: the id of the query configuration in force (hyperparameters, output-defining code, generator model) and the index served.",
+        "properties": {
+          "chunking_fingerprint": {
+            "description": "Chunking fingerprint the index accepted; null when any.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Served/$defs/fingerprint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "collection": {
+            "description": "Collection of the Search Index served.",
+            "pattern": "^chunks_[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "embedding_fingerprint": {
+            "$ref": "#/components/schemas/Served/$defs/fingerprint",
+            "description": "Fingerprint of the index served."
+          },
+          "query_config": {
+            "$ref": "#/components/schemas/Served/$defs/fingerprint",
+            "description": "Id of the query-api configuration in force."
+          }
+        },
+        "required": [
+          "query_config",
+          "embedding_fingerprint",
+          "chunking_fingerprint",
+          "collection"
+        ],
+        "title": "Served",
+        "type": "object"
+      },
+      "Source": {
+        "$defs": {
+          "version": {
+            "description": "Content hash: '<algorithm>:<hex digest>'.",
+            "pattern": "^[a-z0-9_]+:[0-9a-f]+$",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A retrieved scene span: where it is in which asset version, how well it matched, and the text it was found by. Enough to cite a timestamp, open the scene record (scene_set_version, scene_indices) and evaluate relevance by asset version and time span.",
+        "properties": {
+          "asset_version": {
+            "$ref": "#/components/schemas/Source/$defs/version",
+            "description": "Content hash of the asset."
+          },
+          "chunk_version": {
+            "$ref": "#/components/schemas/Source/$defs/version",
+            "description": "Data version of the chunk behind the span."
+          },
+          "end_seconds": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "scene_indices": {
+            "description": "Scenes the span covers, ascending.",
+            "items": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "scene_set_version": {
+            "$ref": "#/components/schemas/Source/$defs/version",
+            "description": "Data version of the scene set; with a scene index it names a scene record."
+          },
+          "score": {
+            "description": "Similarity to the question as the index scores it; higher is closer.",
+            "type": "number"
+          },
+          "sources": {
+            "description": "Source systems holding the asset version, for display names and deep links.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "asset_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "filename": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source_id",
+                "asset_id",
+                "filename"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "start_seconds": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "text": {
+            "description": "The text the span was found by.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_version",
+          "asset_version",
+          "scene_set_version",
+          "scene_indices",
+          "start_seconds",
+          "end_seconds",
+          "score",
+          "text",
+          "sources"
+        ],
+        "title": "Source",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Search and answers over the scene-rag Search Index, for evaluation, user interfaces and services. Read-only. The caller's entitlements travel in the `X-Scene-Rag-Entitlements` header, asserted by the gateway in front.",
+    "title": "scene-rag retrieval: query-api",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/answer": {
+      "post": {
+        "description": "`[n]` in the answer cites `sources[n-1]`; `citations` lists the numbers that name a source, `invalid_citations` those that do not. A refusal carries no citations and consumed no tokens.",
+        "operationId": "answer_answer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerResponse"
+                }
+              }
+            },
+            "description": "The answer, or a refusal."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request cannot be served as asked."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "A backend the request needs does not answer."
+          }
+        },
+        "summary": "An answer written over the relevant scenes, with citations"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "The process answers."
+          }
+        },
+        "summary": "Liveness of the process, and what it serves"
+      }
+    },
+    "/search": {
+      "post": {
+        "description": "Sources the caller may see, best first. The caller's entitlements come from the `X-Scene-Rag-Entitlements` header; without it nothing is visible. `top_k` defaults to and is capped by the served configuration.",
+        "operationId": "search_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "The relevant sources."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request cannot be served as asked."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "The request failed inside the service."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "A backend the request needs does not answer."
+          }
+        },
+        "summary": "The scenes relevant to a question"
+      }
+    }
+  }
+}

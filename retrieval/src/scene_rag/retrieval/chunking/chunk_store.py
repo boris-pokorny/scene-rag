@@ -144,7 +144,7 @@ class MongoChunkStore:
         """Bind to ``database`` on ``client`` and ensure the indexes exist.
 
         ``(lineage.fingerprint, scene_set_version)`` serves `list_done` and the per-set reads
-        of the next step; ``asset_version`` serves the purge queries the design promises.
+        of the next step; ``asset_version`` serves the purge of retired assets.
         """
         self._chunks = client[database][CHUNKS_COLLECTION]
         self._chunk_sets = client[database][CHUNK_SETS_COLLECTION]

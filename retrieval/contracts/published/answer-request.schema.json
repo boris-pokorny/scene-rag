@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/published/answer-request.schema.json",
+  "title": "AnswerRequest",
+  "description": "The body of POST /answer: the question, how many sources the answer may draw on at most, and what narrows the search. The same shape as the search request today; a separate schema so the two may grow apart.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["question"],
+  "properties": {
+    "question": {
+      "description": "The question, as asked; blank or longer than the served configuration allows is rejected.",
+      "type": "string",
+      "minLength": 1
+    },
+    "top_k": {
+      "description": "Sources wanted; the served default when absent or null, capped by the served maximum, at least one.",
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "filters": {
+      "description": "What narrows the search.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_version": {
+          "description": "Only sources of this asset version.",
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

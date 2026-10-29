@@ -15,6 +15,7 @@ from scene_rag.retrieval.embedding.qdrant_index import QdrantSearchIndex
 from scene_rag.retrieval.embedding.settings import SEARCH_INDEX_URL_ENV
 from tests.support.chunking_fakes import ChunkingHarness, make_chunking_harness
 from tests.support.embedding_fakes import EmbeddingHarness, make_embedding_harness
+from tests.support.query_fakes import QueryHarness, make_query_harness
 
 
 @pytest.fixture
@@ -35,6 +36,16 @@ def embedding_harness() -> EmbeddingHarness:
     fixture, requesting it by the same name, to seed state before its cases run.
     """
     return make_embedding_harness()
+
+
+@pytest.fixture
+def query_harness() -> QueryHarness:
+    """The query use cases wired to fresh fakes over an empty Search Index.
+
+    Tests index entries with `query_harness.seed(...)`; a class may override this fixture,
+    requesting it by the same name, to seed state before its cases run.
+    """
+    return make_query_harness()
 
 
 @pytest.fixture(scope="session")

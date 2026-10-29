@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/published/served.schema.json",
+  "title": "Served",
+  "description": "What produced an answer, reported with every response so an evaluation run records exactly what it measured: the id of the query configuration in force (hyperparameters, output-defining code, generator model) and the index served.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["query_config", "embedding_fingerprint", "chunking_fingerprint", "collection"],
+  "properties": {
+    "query_config": {
+      "description": "Id of the query-api configuration in force.",
+      "$ref": "#/$defs/fingerprint"
+    },
+    "embedding_fingerprint": {
+      "description": "Fingerprint of the index served.",
+      "$ref": "#/$defs/fingerprint"
+    },
+    "chunking_fingerprint": {
+      "description": "Chunking fingerprint the index accepted; null when any.",
+      "oneOf": [{ "$ref": "#/$defs/fingerprint" }, { "type": "null" }]
+    },
+    "collection": {
+      "description": "Collection of the Search Index served.",
+      "type": "string",
+      "pattern": "^chunks_[0-9a-f]{12}$"
+    }
+  },
+  "$defs": {
+    "fingerprint": {
+      "description": "Twelve hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    }
+  }
+}

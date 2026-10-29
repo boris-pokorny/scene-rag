@@ -12,8 +12,14 @@ dependencies = [
 [project.optional-dependencies]
 # Per-step and per-role extras, as in extraction: the image installs them all, a process imports
 # only its own. Chunking needs nothing beyond the base dependencies; embedding reaches Ollama
-# and Qdrant over HTTP with the standard library, so its extra is empty too.
+# and Qdrant over HTTP with the standard library, so its extra is empty too. The query-api
+# role needs its HTTP framework and the MCP SDK.
 embedding = []
+query-api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "mcp>=2,<3",
+]
 
 [dependency-groups]
 dev = [
@@ -23,6 +29,8 @@ dev = [
     "jsonschema>=4",
     "hypothesis>=6",
     "pytest-cov>=6",
+    # Drives the FastAPI test client.
+    "httpx>=0.27",
 ]
 
 [build-system]
@@ -47,6 +55,10 @@ test = "pytest --cov"
 test-integration = "pytest -m integration --no-cov"
 worker = "python -m scene_rag.retrieval worker"
 pull-models = "python -m scene_rag.retrieval pull-models"
+query-api = "python -m scene_rag.retrieval query-api"
+# Regenerate the published query API documents from the application and the schemas.
+openapi = "python -m scene_rag.retrieval.query_api.openapi"
+mcp-schemas = "python -m scene_rag.retrieval.query_api.mcp_schema"
 
 [tool.ruff]
 line-length = 100
@@ -92,4 +104,5 @@ testpaths = ["tests"]
 markers = [
     "integration: needs a reachable MongoDB at SCENE_RAG_RETRIEVAL_CHUNK_STORE_URI",
     "qdrant: needs a reachable Qdrant at SCENE_RAG_RETRIEVAL_SEARCH_INDEX_URL as well",
+    "models: needs an Ollama at SCENE_RAG_RETRIEVAL_OLLAMA_URL holding the configured models",
 ]

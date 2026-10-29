@@ -7,7 +7,7 @@ from scene_rag.retrieval import __main__ as cli
 
 
 class TestGivenCommandLine:
-    """The `worker` and `pull-models` subcommands of the service CLI."""
+    """The `worker`, `query-api` and `pull-models` subcommands of the service CLI."""
 
     def test_when_step_unknown_then_rejected(self, capsys: pytest.CaptureFixture[str]) -> None:
         with pytest.raises(SystemExit) as exit_info:
@@ -19,7 +19,7 @@ class TestGivenCommandLine:
         assert sorted(cli.STEPS) == ["chunking", "embedding"]
 
     def test_when_roles_listed_then_every_role_registered(self) -> None:
-        assert sorted(cli.ROLES) == ["pull-models", "worker"]
+        assert sorted(cli.ROLES) == ["pull-models", "query-api", "worker"]
 
     def test_when_role_missing_then_rejected(self) -> None:
         with pytest.raises(SystemExit):
@@ -57,16 +57,72 @@ class TestGivenCommandLine:
         assert cli.main(["worker", "--step", "embedding"]) == 0
         assert calls == [False]
 
-    def test_when_pull_models_dispatched_then_bootstrap_pulls(
+    def test_when_pull_models_dispatched_then_both_bootstraps_pull(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scene_rag.retrieval.embedding import bootstrap
+        from scene_rag.retrieval.embedding import bootstrap as embedding
+        from scene_rag.retrieval.query_api import bootstrap as query_api
 
-        calls: list[bool] = []
-        monkeypatch.setattr(bootstrap, "pull_models", lambda: calls.append(True))
+        calls: list[str] = []
+        monkeypatch.setattr(embedding, "pull_models", lambda: calls.append("embedding"))
+        monkeypatch.setattr(query_api, "pull_models", lambda: calls.append("query-api"))
 
         assert cli.main(["pull-models"]) == 0
-        assert calls == [True]
+        assert calls == ["embedding", "query-api"]
+
+    @pytest.mark.parametrize(
+        "argv, transport, entitlements",
+        [
+            (["query-api"], "http", frozenset()),
+            (["query-api", "--transport", "http"], "http", frozenset()),
+            (["query-api", "--transport", "stdio"], "stdio", frozenset()),
+            (
+                ["query-api", "--transport", "stdio", "--entitlements", "public, team ,"],
+                "stdio",
+                frozenset({"public", "team"}),
+            ),
+        ],
+    )
+    def test_when_query_api_dispatched_then_bootstrap_serves(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        argv: list[str],
+        transport: str,
+        entitlements: frozenset[str],
+    ) -> None:
+        from scene_rag.retrieval.query_api import bootstrap
+
+        calls: list[tuple[str, frozenset[str]]] = []
+        monkeypatch.setattr(
+            bootstrap,
+            "run_server",
+            lambda *, transport, entitlements: calls.append((transport, entitlements)),
+        )
+
+        assert cli.main(argv) == 0
+        assert calls == [(transport, entitlements)]
+
+    def test_when_entitlements_given_over_http_then_rejected(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main(["query-api", "--entitlements", "public"])
+        assert exit_info.value.code == 2
+        assert "stdio" in capsys.readouterr().err
+
+    def test_when_query_api_extra_missing_then_hint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import builtins
+
+        real_import = builtins.__import__
+
+        def failing_import(name: str, *args: object, **kwargs: object) -> object:
+            if name == "scene_rag.retrieval.query_api":
+                raise ImportError("No module named 'fastapi'")
+            return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(builtins, "__import__", failing_import)
+
+        assert cli.main(["query-api"]) == 1
 
     def test_when_interrupted_then_exit_code_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def interrupt(*, once: bool) -> None:
@@ -89,7 +145,9 @@ class TestGivenCommandLine:
     def test_when_cli_imported_then_no_step_loaded(self) -> None:
         code = "import sys\nimport scene_rag.retrieval.__main__\n" + (
             "assert 'scene_rag.retrieval.chunking.bootstrap' not in sys.modules\n"
-            "assert 'scene_rag.retrieval.embedding.bootstrap' not in sys.modules"
+            "assert 'scene_rag.retrieval.embedding.bootstrap' not in sys.modules\n"
+            "assert 'scene_rag.retrieval.query_api' not in sys.modules\n"
+            "assert 'fastapi' not in sys.modules and 'mcp' not in sys.modules"
         )
 
         result = subprocess.run(

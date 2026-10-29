@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/published/source.schema.json",
+  "title": "Source",
+  "description": "A retrieved scene span: where it is in which asset version, how well it matched, and the text it was found by. Enough to cite a timestamp, open the scene record (scene_set_version, scene_indices) and evaluate relevance by asset version and time span.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "chunk_version", "asset_version", "scene_set_version", "scene_indices",
+    "start_seconds", "end_seconds", "score", "text", "sources"
+  ],
+  "properties": {
+    "chunk_version": {
+      "description": "Data version of the chunk behind the span.",
+      "$ref": "#/$defs/version"
+    },
+    "asset_version": {
+      "description": "Content hash of the asset.",
+      "$ref": "#/$defs/version"
+    },
+    "scene_set_version": {
+      "description": "Data version of the scene set; with a scene index it names a scene record.",
+      "$ref": "#/$defs/version"
+    },
+    "scene_indices": {
+      "description": "Scenes the span covers, ascending.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": 0 }
+    },
+    "start_seconds": { "type": "number", "minimum": 0 },
+    "end_seconds": { "type": "number", "minimum": 0 },
+    "score": {
+      "description": "Similarity to the question as the index scores it; higher is closer.",
+      "type": "number"
+    },
+    "text": {
+      "description": "The text the span was found by.",
+      "type": "string",
+      "minLength": 1
+    },
+    "sources": {
+      "description": "Source systems holding the asset version, for display names and deep links.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "asset_id", "filename"],
+        "properties": {
+          "source_id": { "type": "string", "minLength": 1 },
+          "asset_id": { "type": "string", "minLength": 1 },
+          "filename": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    }
+  }
+}

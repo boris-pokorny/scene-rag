@@ -1,6 +1,6 @@
 """Embedding model backed by an Ollama server.
 
-Ollama stands in for the model gateway of the design: it names models by tag and reports the
+Ollama stands in for a model gateway: it names models by tag and reports the
 digest behind each tag, which is what the fingerprint pins. This module is fingerprinted, so it
 holds only what decides the vector: which endpoint is called, what it is sent, and what is put
 before the text. The HTTP layer lives in `http_transport`, outside the fingerprint.

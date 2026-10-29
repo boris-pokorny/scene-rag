@@ -1,10 +1,12 @@
 # A fully wired scene-rag instance: MongoDB for the stores, Ollama for the vision and
 # embedding models, Qdrant for the Search Index, the three extraction workers polling in a
 # loop, the scene-api role on localhost:${SCENE_API_PORT:-8080}, and the retrieval service's
-# chunking and embedding workers. Drop media into extraction/data/media/.
+# chunking and embedding workers and its query-api role on localhost:${QUERY_API_PORT:-8081}
+# (REST routes and the MCP transport at /mcp). Drop media into extraction/data/media/.
 #
-# Each image's own pull-models role pulls the model its config names: extraction's the vision
-# model (enrichment config), retrieval's the embedding model (embedding config).
+# Each image's own pull-models role pulls the models its configs name: extraction's the vision
+# model (enrichment config), retrieval's the embedding model (embedding config) and the
+# generator (query-api config).
 #
 # Paths inside file:// URIs cross containers: ingestion records /data/media/..., segmentation
 # reads it there and files derivatives under /data/derivatives, which enrichment and scene-api
@@ -168,7 +170,8 @@ services:
       scene-api:
         condition: service_healthy
 
-  # The same for the embedding model, from the retrieval image and the embedding config.
+  # The same for the embedding model and the generator, from the retrieval image and its
+  # embedding and query-api configs.
   ollama-pull-retrieval:
     build: ./retrieval
     image: scene-rag-retrieval
@@ -203,6 +206,45 @@ services:
         condition: service_healthy
       ollama-pull-retrieval:
         condition: service_completed_successfully
+
+  # The query-api role: search and answers over HTTP (POST /search, POST /answer) and MCP
+  # (/mcp) on one port. It reads the index ledger, searches the Search Index, embeds queries
+  # and generates answers through Ollama, and proxies scene records and keyframes from
+  # scene-api. The caller's entitlements travel in the X-Scene-Rag-Entitlements header; a
+  # gateway in front is expected to assert them. Until one does, any client can claim any
+  # entitlement, so the port is published on loopback only.
+  query-api:
+    build: ./retrieval
+    image: scene-rag-retrieval
+    restart: unless-stopped
+    command: ["query-api"]
+    environment:
+      SCENE_RAG_RETRIEVAL_CHUNK_STORE_URI: mongodb://mongo:27017
+      SCENE_RAG_RETRIEVAL_CHUNK_STORE_DATABASE: scene_rag_retrieval
+      SCENE_RAG_RETRIEVAL_SEARCH_INDEX_URL: http://qdrant:6333
+      SCENE_RAG_RETRIEVAL_OLLAMA_URL: http://ollama:11434
+      SCENE_RAG_RETRIEVAL_SCENE_API_URL: http://scene-api:8080
+      # The code default 127.0.0.1 is unreachable from outside the container.
+      SCENE_RAG_RETRIEVAL_QUERY_API_HOST: 0.0.0.0
+      SCENE_RAG_RETRIEVAL_QUERY_API_PORT: "8081"
+      # Host headers served: the published port and the compose network's name for it.
+      SCENE_RAG_RETRIEVAL_QUERY_API_ALLOWED_HOSTS: 127.0.0.1,localhost,query-api
+    ports:
+      - "127.0.0.1:${QUERY_API_PORT:-8081}:8081"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      scene-api:
+        condition: service_healthy
+      ollama-pull-retrieval:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
 
 volumes:
   mongo-data:

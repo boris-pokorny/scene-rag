@@ -7,14 +7,15 @@ import pytest
 
 SERVICE = Path(__file__).resolve().parents[2] / "src" / "scene_rag" / "retrieval"
 STEPS = {"chunking", "embedding"}
-# Roles (query-api) join here when they exist; a role obeys the step rules and never writes.
-ROLES: set[str] = set()
+# A role obeys the step rules and never writes.
+ROLES = {"query_api"}
 PACKAGES = STEPS | ROLES
 
 # Per package: the modules that may import pymongo, besides bootstrap.
 STORE_BACKENDS = {
     "chunking": {"chunk_store.py"},
     "embedding": {"chunk_reader.py", "index_store.py"},
+    "query_api": {"index_ledger.py"},
 }
 # Per step: the write side other steps and roles must never import.
 WRITER_SIDE = {
@@ -32,7 +33,20 @@ WRITER_SIDE = {
 }
 # Tools confined to named modules: a package, or a module within one, per tool.
 CONFINED_TOOLS = {
-    "urllib.request": {"chunking/http_transport.py", "embedding/http_transport.py"},
+    "urllib.request": {
+        "chunking/http_transport.py",
+        "embedding/http_transport.py",
+        "query_api/http_transport.py",
+    },
+    "fastapi": {"query_api/app.py", "query_api/openapi.py", "query_api/bootstrap.py"},
+    "starlette": {"query_api/app.py"},
+    "uvicorn": {"query_api/bootstrap.py"},
+    "mcp": {
+        "query_api/mcp_server.py",
+        "query_api/mcp_schema.py",
+        "query_api/app.py",
+        "query_api/bootstrap.py",
+    },
 }
 
 
@@ -65,6 +79,7 @@ def package_of(module: Path) -> str | None:
 
 
 PACKAGE_MODULES = [module for module in modules_under(SERVICE) if package_of(module) is not None]
+ROLE_MODULES = [module for module in PACKAGE_MODULES if package_of(module) in ROLES]
 ALL_MODULES = modules_under(SERVICE)
 
 
@@ -109,6 +124,22 @@ class TestGivenPackageModules:
             name.split(".")[0] in {"pymongo", "bson"} for name in imported_names(module)
         )
         assert not uses_pymongo, f"{module_id(module)} imports pymongo"
+
+
+class TestGivenRoleModules:
+    """A role reads the stores the steps write, through its own views, and never writes."""
+
+    def test_when_roles_listed_then_every_role_present(self) -> None:
+        assert all((SERVICE / role).is_dir() for role in ROLES)
+
+    @pytest.mark.parametrize("module", ROLE_MODULES, ids=module_id)
+    def test_when_in_role_then_no_index_creation_or_write(self, module: Path) -> None:
+        accesses = {access.split(".", 1)[1] for access in attribute_accesses(module)}
+        writes = {"create_index", "insert_one", "insert_many", "update_one", "update_many"}
+        writes |= {"delete_one", "delete_many", "replace_one", "find_one_and_update", "drop"}
+        writes |= {"upsert", "ensure_collection", "drop_collection", "put_index", "put_index_set"}
+        offending = accesses & writes
+        assert not offending, f"{module_id(module)} calls {sorted(offending)}"
 
 
 def top_level_imports(module: Path) -> set[str]:

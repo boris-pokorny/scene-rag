@@ -6,7 +6,7 @@ FROM python:3.14-slim AS builder
 RUN pip install --no-cache-dir pdm==2.26.8
 WORKDIR /build
 COPY pyproject.toml pdm.lock README.md ./
-RUN pdm export --prod -o requirements.txt
+RUN pdm export --prod -G embedding -G query-api -o requirements.txt
 COPY src ./src
 RUN pip wheel --no-deps --no-cache-dir --wheel-dir /wheels .
 

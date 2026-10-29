@@ -1,0 +1,464 @@
+{
+  "resource_templates": [
+    {
+      "description": "One scene with its enrichments, keyframes and audio clip, as the extraction service publishes it; visible only to a caller entitled to its asset.",
+      "mimeType": "application/json",
+      "name": "scene",
+      "title": "Scene record",
+      "uriTemplate": "scene://scene-sets/{scene_set_version}/{index}"
+    },
+    {
+      "description": "The JPEG of a keyframe, by the content digest a scene record names.",
+      "mimeType": "image/jpeg",
+      "name": "keyframe",
+      "title": "Keyframe",
+      "uriTemplate": "keyframe://derivatives/{digest}"
+    }
+  ],
+  "server": {
+    "instructions": "Read-only search over a video library cut into scenes. `search_scenes` returns the scene spans relevant to a question, best first, with timestamps and provenance; write the answer from them and cite them. `answer` returns an answer written by the server's own model with `[n]` citations into its `sources`. A source's `scene_set_version` and `scene_indices` name `scene://` resources; a scene record names `keyframe://` resources. Over HTTP the caller's entitlements come from the `X-Scene-Rag-Entitlements` header; without them nothing is visible.",
+    "name": "scene-rag-query-api",
+    "version": "1.0.0"
+  },
+  "tools": [
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "The scene spans relevant to a question, best first, that the caller may see. `top_k` defaults to and is capped by the served configuration; `asset_version` narrows the search to one asset version.",
+      "inputSchema": {
+        "properties": {
+          "asset_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Asset Version"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Top K"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "search_scenesArguments",
+        "type": "object"
+      },
+      "name": "search_scenes",
+      "outputSchema": {
+        "$defs": {
+          "ServedDocument": {
+            "description": "What produced the answer: the query config and the index.",
+            "properties": {
+              "chunking_fingerprint": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Chunking Fingerprint"
+              },
+              "collection": {
+                "title": "Collection",
+                "type": "string"
+              },
+              "embedding_fingerprint": {
+                "title": "Embedding Fingerprint",
+                "type": "string"
+              },
+              "query_config": {
+                "title": "Query Config",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query_config",
+              "embedding_fingerprint",
+              "chunking_fingerprint",
+              "collection"
+            ],
+            "title": "ServedDocument",
+            "type": "object"
+          },
+          "SourceDocument": {
+            "description": "A retrieved scene span, ranked and citable.\n\nThe span's entitlements are not published: they would name to the caller groups the\ncaller does not belong to.",
+            "properties": {
+              "asset_version": {
+                "title": "Asset Version",
+                "type": "string"
+              },
+              "chunk_version": {
+                "title": "Chunk Version",
+                "type": "string"
+              },
+              "end_seconds": {
+                "title": "End Seconds",
+                "type": "number"
+              },
+              "scene_indices": {
+                "items": {
+                  "type": "integer"
+                },
+                "title": "Scene Indices",
+                "type": "array"
+              },
+              "scene_set_version": {
+                "title": "Scene Set Version",
+                "type": "string"
+              },
+              "score": {
+                "title": "Score",
+                "type": "number"
+              },
+              "sources": {
+                "items": {
+                  "$ref": "#/$defs/SourceRefDocument"
+                },
+                "title": "Sources",
+                "type": "array"
+              },
+              "start_seconds": {
+                "title": "Start Seconds",
+                "type": "number"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chunk_version",
+              "asset_version",
+              "scene_set_version",
+              "scene_indices",
+              "start_seconds",
+              "end_seconds",
+              "score",
+              "text",
+              "sources"
+            ],
+            "title": "SourceDocument",
+            "type": "object"
+          },
+          "SourceRefDocument": {
+            "description": "A source system's reference to the asset version.",
+            "properties": {
+              "asset_id": {
+                "title": "Asset Id",
+                "type": "string"
+              },
+              "filename": {
+                "title": "Filename",
+                "type": "string"
+              },
+              "source_id": {
+                "title": "Source Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_id",
+              "asset_id",
+              "filename"
+            ],
+            "title": "SourceRefDocument",
+            "type": "object"
+          }
+        },
+        "description": "The answer to a search: sources best first.",
+        "properties": {
+          "served": {
+            "$ref": "#/$defs/ServedDocument"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/$defs/SourceDocument"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources",
+          "served"
+        ],
+        "title": "SearchResponseDocument",
+        "type": "object"
+      },
+      "title": "Search scenes"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "An answer written over the relevant scene spans by the server's own model, or a refusal. `[n]` in the answer cites `sources[n-1]`.",
+      "inputSchema": {
+        "properties": {
+          "asset_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Asset Version"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Top K"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "answerArguments",
+        "type": "object"
+      },
+      "name": "answer",
+      "outputSchema": {
+        "$defs": {
+          "ServedDocument": {
+            "description": "What produced the answer: the query config and the index.",
+            "properties": {
+              "chunking_fingerprint": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Chunking Fingerprint"
+              },
+              "collection": {
+                "title": "Collection",
+                "type": "string"
+              },
+              "embedding_fingerprint": {
+                "title": "Embedding Fingerprint",
+                "type": "string"
+              },
+              "query_config": {
+                "title": "Query Config",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query_config",
+              "embedding_fingerprint",
+              "chunking_fingerprint",
+              "collection"
+            ],
+            "title": "ServedDocument",
+            "type": "object"
+          },
+          "SourceDocument": {
+            "description": "A retrieved scene span, ranked and citable.\n\nThe span's entitlements are not published: they would name to the caller groups the\ncaller does not belong to.",
+            "properties": {
+              "asset_version": {
+                "title": "Asset Version",
+                "type": "string"
+              },
+              "chunk_version": {
+                "title": "Chunk Version",
+                "type": "string"
+              },
+              "end_seconds": {
+                "title": "End Seconds",
+                "type": "number"
+              },
+              "scene_indices": {
+                "items": {
+                  "type": "integer"
+                },
+                "title": "Scene Indices",
+                "type": "array"
+              },
+              "scene_set_version": {
+                "title": "Scene Set Version",
+                "type": "string"
+              },
+              "score": {
+                "title": "Score",
+                "type": "number"
+              },
+              "sources": {
+                "items": {
+                  "$ref": "#/$defs/SourceRefDocument"
+                },
+                "title": "Sources",
+                "type": "array"
+              },
+              "start_seconds": {
+                "title": "Start Seconds",
+                "type": "number"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "chunk_version",
+              "asset_version",
+              "scene_set_version",
+              "scene_indices",
+              "start_seconds",
+              "end_seconds",
+              "score",
+              "text",
+              "sources"
+            ],
+            "title": "SourceDocument",
+            "type": "object"
+          },
+          "SourceRefDocument": {
+            "description": "A source system's reference to the asset version.",
+            "properties": {
+              "asset_id": {
+                "title": "Asset Id",
+                "type": "string"
+              },
+              "filename": {
+                "title": "Filename",
+                "type": "string"
+              },
+              "source_id": {
+                "title": "Source Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_id",
+              "asset_id",
+              "filename"
+            ],
+            "title": "SourceRefDocument",
+            "type": "object"
+          },
+          "UsageDocument": {
+            "description": "Tokens one generation consumed, when known.",
+            "properties": {
+              "completion_tokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Completion Tokens"
+              },
+              "prompt_tokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Prompt Tokens"
+              }
+            },
+            "required": [
+              "prompt_tokens",
+              "completion_tokens"
+            ],
+            "title": "UsageDocument",
+            "type": "object"
+          }
+        },
+        "description": "The answer to a question: text, citations into ``sources``, or a refusal.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "invalid_citations": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Invalid Citations",
+            "type": "array"
+          },
+          "refused": {
+            "title": "Refused",
+            "type": "boolean"
+          },
+          "served": {
+            "$ref": "#/$defs/ServedDocument"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/$defs/SourceDocument"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/$defs/UsageDocument"
+          }
+        },
+        "required": [
+          "answer",
+          "refused",
+          "citations",
+          "invalid_citations",
+          "sources",
+          "usage",
+          "served"
+        ],
+        "title": "AnswerResponseDocument",
+        "type": "object"
+      },
+      "title": "Answer a question"
+    }
+  ]
+}

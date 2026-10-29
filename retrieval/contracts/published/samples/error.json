@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "invalid_parameter",
+    "message": "question must not be blank"
+  }
+}

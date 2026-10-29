@@ -125,7 +125,7 @@ class MongoIndexStore:
         """Bind to ``database`` on ``client`` and ensure the indexes exist.
 
         ``(lineage.fingerprint, chunk_set_version)`` serves `list_done`; ``asset_version``
-        serves the purge queries the design promises.
+        serves the purge of retired assets.
         """
         self._index_sets = client[database][INDEX_SETS_COLLECTION]
         self._indexes = client[database][INDEXES_COLLECTION]

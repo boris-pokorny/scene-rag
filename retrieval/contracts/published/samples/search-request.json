@@ -1,0 +1,7 @@
+{
+  "question": "When does the pipeline cut the video into scenes?",
+  "top_k": 2,
+  "filters": {
+    "asset_version": "sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589"
+  }
+}
