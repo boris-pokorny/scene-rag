@@ -1,0 +1,41 @@
+{
+  "version": "sha256:d0ed8be54fc560b276d4caac18b6dcced538bf4cd3c229d9d9cc0ddece757e84",
+  "schema_version": 1,
+  "chunk_version": "sha256:66255afd3491caee0b6722ecd760422dca989661df7e139f327505317fbddd01",
+  "chunk_set_version": "sha256:ad520f17905f9ea24c9cb3558b2366bb489ca128eacaef05f9692e571e104416",
+  "scene_set_version": "sha256:37c9ff2cbfb0890ef9c3f4963b1dbcb109d2f8f65a50db3a043cee8c76cbe7e1",
+  "asset_version": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "chunking_fingerprint": "c7a1e2f3b4d5",
+  "segmentation_fingerprint": "3b9e1f6a2c40",
+  "chunk_index": 0,
+  "scene_indices": [
+    0
+  ],
+  "start_seconds": 0.0,
+  "end_seconds": 4.0,
+  "text": "Welcome back. Today we look at how the pipeline cuts a video into scenes.",
+  "sources": [
+    {
+      "source_id": "local",
+      "asset_id": "asset-0000000000000001",
+      "filename": "clip.mp4"
+    }
+  ],
+  "entitlements": [
+    "public",
+    "team-platform"
+  ],
+  "classifications": [
+    "internal"
+  ],
+  "created_at": "2026-10-28T12:00:00Z",
+  "lineage": {
+    "step": "embedding",
+    "fingerprint": "5e2d4c6b8a90",
+    "inputs": [
+      "chunk:sha256:66255afd3491caee0b6722ecd760422dca989661df7e139f327505317fbddd01"
+    ],
+    "version": "sha256:d0ed8be54fc560b276d4caac18b6dcced538bf4cd3c229d9d9cc0ddece757e84",
+    "image": null
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/internal/index.schema.json",
+  "title": "Index",
+  "description": "One document of the index ledger (collection indexes, in the Chunk Store's database): what one embedding fingerprint built, and how a query must be embedded against it. Written once by the embedding step when it first prepares the index of its fingerprint; read by the query-api role, which takes the collection, the model and the query prefix from it rather than from its own settings, so index and query never embed differently.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_id", "schema_version", "collection", "model", "dimensions", "distance",
+    "chunking_fingerprint", "document_prefix", "query_prefix", "truncate", "num_ctx",
+    "created_at", "image"
+  ],
+  "properties": {
+    "_id": {
+      "description": "The embedding fingerprint: the identifier of the index.",
+      "$ref": "#/$defs/fingerprint"
+    },
+    "schema_version": { "const": 1 },
+    "collection": {
+      "description": "Collection of the Search Index holding the points: chunks_<fingerprint>.",
+      "type": "string",
+      "pattern": "^chunks_[0-9a-f]{12}$"
+    },
+    "model": {
+      "description": "The embedding model, as the backend names it, and the digest of its bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "digest"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/version" }
+      }
+    },
+    "dimensions": { "type": "integer", "minimum": 1 },
+    "distance": { "enum": ["cosine", "dot", "euclid"] },
+    "chunking_fingerprint": {
+      "description": "Chunking fingerprint accepted; null when any.",
+      "oneOf": [{ "$ref": "#/$defs/fingerprint" }, { "type": "null" }]
+    },
+    "document_prefix": {
+      "description": "Put before a chunk's text when it was embedded.",
+      "type": "string"
+    },
+    "query_prefix": {
+      "description": "To put before a query when it is embedded against this index.",
+      "type": "string"
+    },
+    "truncate": { "type": "boolean" },
+    "num_ctx": { "type": "integer", "minimum": 1 },
+    "created_at": { "$ref": "#/$defs/datetime" },
+    "image": {
+      "description": "Digest of the service image that prepared the index, when known.",
+      "type": ["string", "null"]
+    }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "fingerprint": {
+      "description": "Step fingerprint: twelve hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "datetime": {
+      "description": "UTC timestamp. Stored as a BSON date; rendered as RFC 3339 in JSON samples.",
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

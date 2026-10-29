@@ -1,0 +1,18 @@
+{
+  "_id": "5e2d4c6b8a90",
+  "schema_version": 1,
+  "collection": "chunks_5e2d4c6b8a90",
+  "model": {
+    "name": "embeddinggemma",
+    "digest": "sha256:abababababababababababababababababababababababababababababababab"
+  },
+  "dimensions": 768,
+  "distance": "cosine",
+  "chunking_fingerprint": null,
+  "document_prefix": "title: none | text: ",
+  "query_prefix": "task: search result | query: ",
+  "truncate": true,
+  "num_ctx": 2048,
+  "created_at": "2026-10-28T12:00:00Z",
+  "image": null
+}

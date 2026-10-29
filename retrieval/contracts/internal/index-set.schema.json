@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/internal/index-set.schema.json",
+  "title": "IndexSet",
+  "description": "One document of the index ledger (collection index_sets, in the Chunk Store's database): the completion marker of one chunk set embedded under one embedding fingerprint, written after its points. Pending work is derived from it: a chunk set with no index set under the current fingerprint is pending. Written only by the embedding step. A vector_count of zero is a valid outcome: the chunk set had no chunks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_id", "schema_version", "chunk_set_version", "scene_set_version", "asset_version",
+    "chunking_fingerprint", "collection", "vector_count", "created_at", "lineage"
+  ],
+  "properties": {
+    "_id": {
+      "description": "Data version of the index set: hash(chunk set version + fingerprint).",
+      "$ref": "#/$defs/version"
+    },
+    "schema_version": { "const": 1 },
+    "chunk_set_version": { "$ref": "#/$defs/version" },
+    "scene_set_version": { "$ref": "#/$defs/version" },
+    "asset_version": { "$ref": "#/$defs/version" },
+    "chunking_fingerprint": { "$ref": "#/$defs/fingerprint" },
+    "collection": {
+      "description": "Collection of the Search Index the points went to: chunks_<embedding fingerprint>.",
+      "type": "string",
+      "pattern": "^chunks_[0-9a-f]{12}$"
+    },
+    "vector_count": { "type": "integer", "minimum": 0 },
+    "created_at": { "$ref": "#/$defs/datetime" },
+    "lineage": { "$ref": "#/$defs/lineage" }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "fingerprint": {
+      "description": "Step fingerprint: twelve hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "datetime": {
+      "description": "UTC timestamp. Stored as a BSON date; rendered as RFC 3339 in JSON samples.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "fingerprint", "inputs", "version", "image"],
+      "properties": {
+        "step": { "const": "embedding" },
+        "fingerprint": { "$ref": "#/$defs/fingerprint" },
+        "inputs": {
+          "description": "Data versions read: every chunk of the set, in chunk order; empty for a chunk set without chunks.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^chunk:[a-z0-9_]+:[0-9a-f]+$" }
+        },
+        "version": { "$ref": "#/$defs/version" },
+        "image": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

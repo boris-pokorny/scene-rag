@@ -6,23 +6,33 @@ from pathlib import Path
 import pytest
 
 SERVICE = Path(__file__).resolve().parents[2] / "src" / "scene_rag" / "retrieval"
-STEPS = {"chunking"}
+STEPS = {"chunking", "embedding"}
 # Roles (query-api) join here when they exist; a role obeys the step rules and never writes.
 ROLES: set[str] = set()
 PACKAGES = STEPS | ROLES
 
 # Per package: the modules that may import pymongo, besides bootstrap.
-STORE_BACKENDS = {"chunking": {"chunk_store.py"}}
+STORE_BACKENDS = {
+    "chunking": {"chunk_store.py"},
+    "embedding": {"chunk_reader.py", "index_store.py"},
+}
 # Per step: the write side other steps and roles must never import.
 WRITER_SIDE = {
     "chunking": {
         "scene_rag.retrieval.chunking.protocols.ChunkStoreWriter",
         "scene_rag.retrieval.chunking.chunk_store",
     },
+    "embedding": {
+        "scene_rag.retrieval.embedding.protocols.SearchIndexWriter",
+        "scene_rag.retrieval.embedding.protocols.SearchIndex",
+        "scene_rag.retrieval.embedding.protocols.IndexStoreWriter",
+        "scene_rag.retrieval.embedding.index_store",
+        "scene_rag.retrieval.embedding.qdrant_index",
+    },
 }
 # Tools confined to named modules: a package, or a module within one, per tool.
 CONFINED_TOOLS = {
-    "urllib.request": {"chunking/http_transport.py"},
+    "urllib.request": {"chunking/http_transport.py", "embedding/http_transport.py"},
 }
 
 

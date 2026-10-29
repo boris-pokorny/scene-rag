@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/retrieval/internal/index-entry.schema.json",
+  "title": "IndexEntry",
+  "description": "The payload of one point of the Search Index (collection chunks_<embedding fingerprint>): one chunk embedded under one embedding fingerprint. The point's id is the UUID (version 5, the step's namespace) of chunk_version and its vector the embedding. Written only by the embedding step; read by the query-api role. Carries what a search needs to filter, rank and cite from the index alone; keyframes and enrichment references are fetched from the Chunk Store by chunk_version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version", "schema_version", "chunk_version", "chunk_set_version", "scene_set_version",
+    "asset_version", "chunking_fingerprint", "segmentation_fingerprint", "chunk_index",
+    "scene_indices", "start_seconds", "end_seconds", "text", "sources", "entitlements",
+    "classifications", "created_at", "lineage"
+  ],
+  "properties": {
+    "version": {
+      "description": "Data version of the entry: hash(chunk version + fingerprint).",
+      "$ref": "#/$defs/version"
+    },
+    "schema_version": { "const": 1 },
+    "chunk_version": {
+      "description": "Data version of the chunk: the join key to the Chunk Store.",
+      "$ref": "#/$defs/version"
+    },
+    "chunk_set_version": { "$ref": "#/$defs/version" },
+    "scene_set_version": { "$ref": "#/$defs/version" },
+    "asset_version": {
+      "description": "Content hash of the asset version, for the retired-asset filter and purge.",
+      "$ref": "#/$defs/version"
+    },
+    "chunking_fingerprint": { "$ref": "#/$defs/fingerprint" },
+    "segmentation_fingerprint": { "$ref": "#/$defs/fingerprint" },
+    "chunk_index": { "type": "integer", "minimum": 0 },
+    "scene_indices": {
+      "description": "Scenes the chunk covers, ascending; at least one.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": 0 },
+      "uniqueItems": true
+    },
+    "start_seconds": { "type": "number", "minimum": 0 },
+    "end_seconds": { "type": "number", "minimum": 0 },
+    "text": {
+      "description": "The retrieval text, as embedded (without the document prefix).",
+      "type": "string",
+      "minLength": 1
+    },
+    "sources": {
+      "description": "Source references holding the asset version, for citations.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "asset_id", "filename"],
+        "properties": {
+          "source_id": { "type": "string", "minLength": 1 },
+          "asset_id": { "type": "string", "minLength": 1 },
+          "filename": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "entitlements": {
+      "description": "Who may see the chunk, sorted; query-api filters with 'match any'. Empty is visible to nobody.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "classifications": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "created_at": { "$ref": "#/$defs/datetime" },
+    "lineage": { "$ref": "#/$defs/lineage" }
+  },
+  "$defs": {
+    "version": {
+      "description": "Content hash: '<algorithm>:<hex digest>'.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[0-9a-f]+$"
+    },
+    "fingerprint": {
+      "description": "Step fingerprint: twelve hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "datetime": {
+      "description": "UTC timestamp, RFC 3339; a payload holds it as a string.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "fingerprint", "inputs", "version", "image"],
+      "properties": {
+        "step": { "const": "embedding" },
+        "fingerprint": {
+          "description": "Fingerprint of the step: its hyperparameters (chunking pin included), output-defining code and model digest.",
+          "$ref": "#/$defs/fingerprint"
+        },
+        "inputs": {
+          "description": "Data versions read: the chunk.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "type": "string", "pattern": "^chunk:[a-z0-9_]+:[0-9a-f]+$" }
+        },
+        "version": { "$ref": "#/$defs/version" },
+        "image": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -1,9 +1,10 @@
-# A fully wired scene-rag instance: MongoDB for the stores, Ollama for the vision model, the
-# three extraction workers polling in a loop, the scene-api role on
-# localhost:${SCENE_API_PORT:-8080}, and the retrieval service's chunking worker reading it.
-# Drop media into extraction/data/media/.
+# A fully wired scene-rag instance: MongoDB for the stores, Ollama for the vision and
+# embedding models, Qdrant for the Search Index, the three extraction workers polling in a
+# loop, the scene-api role on localhost:${SCENE_API_PORT:-8080}, and the retrieval service's
+# chunking and embedding workers. Drop media into extraction/data/media/.
 #
-# The vision model is pulled by the image's own pull-models role, from the enrichment config.
+# Each image's own pull-models role pulls the model its config names: extraction's the vision
+# model (enrichment config), retrieval's the embedding model (embedding config).
 #
 # Paths inside file:// URIs cross containers: ingestion records /data/media/..., segmentation
 # reads it there and files derivatives under /data/derivatives, which enrichment and scene-api
@@ -47,10 +48,29 @@ services:
 
   ollama:
     image: docker.io/ollama/ollama:0.40.12
+    # Only on localhost, for the `pdm run` flow of retrieval/README.md (`worker --step
+    # embedding` and `pull-models` on the host reach the same server as the containers).
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama-models:/root/.ollama
     healthcheck:
       test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  qdrant:
+    image: docker.io/qdrant/qdrant:v1.20.0
+    # Only on localhost, for the dashboard (/dashboard) and the `pdm run` flow of
+    # retrieval/README.md.
+    ports:
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # The image ships neither curl nor wget; bash's /dev/tcp checks that the port answers.
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -148,8 +168,45 @@ services:
       scene-api:
         condition: service_healthy
 
+  # The same for the embedding model, from the retrieval image and the embedding config.
+  ollama-pull-retrieval:
+    build: ./retrieval
+    image: scene-rag-retrieval
+    command: ["pull-models"]
+    environment:
+      SCENE_RAG_RETRIEVAL_OLLAMA_URL: http://ollama:11434
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  # The embedding step reads the chunk collections the chunking worker writes, embeds them
+  # through Ollama and writes one Qdrant collection per embedding fingerprint, plus the index
+  # ledger (index_sets, indexes) in the same retrieval database.
+  embedding:
+    build: ./retrieval
+    image: scene-rag-retrieval
+    restart: unless-stopped
+    command: ["worker", "--step", "embedding"]
+    environment:
+      SCENE_RAG_RETRIEVAL_CHUNK_STORE_URI: mongodb://mongo:27017
+      SCENE_RAG_RETRIEVAL_CHUNK_STORE_DATABASE: scene_rag_retrieval
+      SCENE_RAG_RETRIEVAL_SEARCH_INDEX_URL: http://qdrant:6333
+      SCENE_RAG_RETRIEVAL_OLLAMA_URL: http://ollama:11434
+      SCENE_RAG_RETRIEVAL_POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
+      SCENE_RAG_RETRIEVAL_EMBEDDING_WORKERS: ${EMBEDDING_WORKERS:-1}
+      SCENE_RAG_RETRIEVAL_EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama-pull-retrieval:
+        condition: service_completed_successfully
+
 volumes:
   mongo-data:
   ollama-models:
   derivatives:
   whisper-cache:
+  qdrant-data:
