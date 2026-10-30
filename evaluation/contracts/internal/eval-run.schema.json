@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/evaluation/internal/eval-run.schema.json",
+  "title": "EvalRun",
+  "description": "One evaluation of what query-api serves against one dataset version, as `run` stores it in the Eval Store (runs/<run_id>.json) and `compare` reads it back, possibly with newer code, hence schema_version. Metric keys are '<use case>/<metric>'; a percentile aggregate adds '.p50' or '.p95'. A metric that applied to no case is absent, never zero.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_id", "started_at", "finished_at", "dataset", "served",
+    "config", "cases", "aggregates", "errors"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "$ref": "#/$defs/run_id" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "dataset": { "$ref": "#/$defs/dataset" },
+    "served": {
+      "description": "What query-api reported serving throughout the run; null when no call succeeded.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["query_config", "embedding_fingerprint", "chunking_fingerprint", "collection"],
+          "properties": {
+            "query_config": { "type": "string" },
+            "embedding_fingerprint": { "type": "string" },
+            "chunking_fingerprint": { "type": ["string", "null"] },
+            "collection": { "type": "string" }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "config": {
+      "description": "The run's hyperparameters; they belong to no release.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ks", "top_k", "use_cases"],
+      "properties": {
+        "ks": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1 } },
+        "top_k": { "type": "integer", "minimum": 1 },
+        "use_cases": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["search", "answer"] }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "tags", "metrics", "errors"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "metrics": { "$ref": "#/$defs/metrics" },
+          "errors": {
+            "description": "One message per use case query-api failed on.",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "aggregates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "by_tag"],
+      "properties": {
+        "overall": { "$ref": "#/$defs/metrics" },
+        "by_tag": { "type": "object", "additionalProperties": { "$ref": "#/$defs/metrics" } }
+      }
+    },
+    "errors": { "description": "Failed query-api calls.", "type": "integer", "minimum": 0 }
+  },
+  "$defs": {
+    "run_id": { "type": "string", "pattern": "^run-[0-9a-f]{12}$" },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "propertyNames": { "pattern": "^(search|answer)/[a-z_]+(@[0-9]+)?(\\.p(50|95))?$" },
+      "additionalProperties": { "type": "number" }
+    }
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "run_id": "run-0b7c1d2e3f40",
+  "started_at": "2026-10-30T10:00:00+00:00",
+  "finished_at": "2026-10-30T10:00:01+00:00",
+  "dataset": {
+    "name": "example",
+    "version": "1.0.0",
+    "sha256": "f4b746153b7df0e11fe404ecce16b2a291e1fbdbc4dc04bc9244a5b310076866"
+  },
+  "served": {
+    "query_config": "11d0a9e2c4f1",
+    "embedding_fingerprint": "5e2d4c6b8a90",
+    "chunking_fingerprint": null,
+    "collection": "chunks_5e2d4c6b8a90"
+  },
+  "config": {
+    "ks": [
+      1,
+      5,
+      10
+    ],
+    "top_k": 10,
+    "use_cases": [
+      "search",
+      "answer"
+    ]
+  },
+  "cases": [
+    {
+      "id": "q-001",
+      "tags": [
+        "visual",
+        "temporal"
+      ],
+      "metrics": {
+        "answer/citation_validity": 1.0,
+        "answer/completion_tokens": 23.0,
+        "answer/latency_ms": 50.0,
+        "answer/leakage": 0.0,
+        "answer/prompt_tokens": 412.0,
+        "answer/refusal_correctness": 1.0,
+        "search/hit@1": 1.0,
+        "search/hit@10": 1.0,
+        "search/hit@5": 1.0,
+        "search/latency_ms": 50.0,
+        "search/leakage": 0.0,
+        "search/mrr": 1.0,
+        "search/ndcg@1": 1.0,
+        "search/ndcg@10": 1.0,
+        "search/ndcg@5": 1.0,
+        "search/recall@1": 1.0,
+        "search/recall@10": 1.0,
+        "search/recall@5": 1.0
+      },
+      "errors": []
+    },
+    {
+      "id": "q-002",
+      "tags": [
+        "unanswerable"
+      ],
+      "metrics": {
+        "answer/latency_ms": 50.0,
+        "answer/leakage": 0.0,
+        "answer/refusal_correctness": 1.0,
+        "search/latency_ms": 50.0,
+        "search/leakage": 0.0
+      },
+      "errors": []
+    },
+    {
+      "id": "q-003",
+      "tags": [
+        "access"
+      ],
+      "metrics": {
+        "answer/latency_ms": 50.0,
+        "answer/leakage": 0.0,
+        "answer/refusal_correctness": 1.0,
+        "search/latency_ms": 50.0,
+        "search/leakage": 0.0
+      },
+      "errors": []
+    }
+  ],
+  "aggregates": {
+    "overall": {
+      "answer/citation_validity": 1.0,
+      "answer/completion_tokens": 23.0,
+      "answer/latency_ms.p50": 50.0,
+      "answer/latency_ms.p95": 50.0,
+      "answer/leakage": 0.0,
+      "answer/prompt_tokens": 412.0,
+      "answer/refusal_correctness": 1.0,
+      "search/hit@1": 1.0,
+      "search/hit@10": 1.0,
+      "search/hit@5": 1.0,
+      "search/latency_ms.p50": 50.0,
+      "search/latency_ms.p95": 50.0,
+      "search/leakage": 0.0,
+      "search/mrr": 1.0,
+      "search/ndcg@1": 1.0,
+      "search/ndcg@10": 1.0,
+      "search/ndcg@5": 1.0,
+      "search/recall@1": 1.0,
+      "search/recall@10": 1.0,
+      "search/recall@5": 1.0
+    },
+    "by_tag": {
+      "access": {
+        "answer/latency_ms.p50": 50.0,
+        "answer/latency_ms.p95": 50.0,
+        "answer/leakage": 0.0,
+        "answer/refusal_correctness": 1.0,
+        "search/latency_ms.p50": 50.0,
+        "search/latency_ms.p95": 50.0,
+        "search/leakage": 0.0
+      },
+      "temporal": {
+        "answer/citation_validity": 1.0,
+        "answer/completion_tokens": 23.0,
+        "answer/latency_ms.p50": 50.0,
+        "answer/latency_ms.p95": 50.0,
+        "answer/leakage": 0.0,
+        "answer/prompt_tokens": 412.0,
+        "answer/refusal_correctness": 1.0,
+        "search/hit@1": 1.0,
+        "search/hit@10": 1.0,
+        "search/hit@5": 1.0,
+        "search/latency_ms.p50": 50.0,
+        "search/latency_ms.p95": 50.0,
+        "search/leakage": 0.0,
+        "search/mrr": 1.0,
+        "search/ndcg@1": 1.0,
+        "search/ndcg@10": 1.0,
+        "search/ndcg@5": 1.0,
+        "search/recall@1": 1.0,
+        "search/recall@10": 1.0,
+        "search/recall@5": 1.0
+      },
+      "unanswerable": {
+        "answer/latency_ms.p50": 50.0,
+        "answer/latency_ms.p95": 50.0,
+        "answer/leakage": 0.0,
+        "answer/refusal_correctness": 1.0,
+        "search/latency_ms.p50": 50.0,
+        "search/latency_ms.p95": 50.0,
+        "search/leakage": 0.0
+      },
+      "visual": {
+        "answer/citation_validity": 1.0,
+        "answer/completion_tokens": 23.0,
+        "answer/latency_ms.p50": 50.0,
+        "answer/latency_ms.p95": 50.0,
+        "answer/leakage": 0.0,
+        "answer/prompt_tokens": 412.0,
+        "answer/refusal_correctness": 1.0,
+        "search/hit@1": 1.0,
+        "search/hit@10": 1.0,
+        "search/hit@5": 1.0,
+        "search/latency_ms.p50": 50.0,
+        "search/latency_ms.p95": 50.0,
+        "search/leakage": 0.0,
+        "search/mrr": 1.0,
+        "search/ndcg@1": 1.0,
+        "search/ndcg@10": 1.0,
+        "search/ndcg@5": 1.0,
+        "search/recall@1": 1.0,
+        "search/recall@10": 1.0,
+        "search/recall@5": 1.0
+      }
+    }
+  },
+  "errors": 0
+}

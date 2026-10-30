@@ -1,0 +1,48 @@
+{
+  "sources": [
+    {
+      "chunk_version": "sha256:c8e382f4e2ba46bec79de81a9a48aa85e77d9e7d14b687e7b6853d7c018e03cd",
+      "asset_version": "sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589",
+      "scene_set_version": "sha256:b46cad2d38477b75e1ae310a1750efb03f99bc4e7bf9d96bef14c49982fa3d1b",
+      "scene_indices": [
+        1
+      ],
+      "start_seconds": 4.0,
+      "end_seconds": 8.0,
+      "score": 0.91,
+      "text": "chunk 1 text",
+      "sources": [
+        {
+          "source_id": "local",
+          "asset_id": "asset-0000000000000001",
+          "filename": "clip.mp4"
+        }
+      ]
+    },
+    {
+      "chunk_version": "sha256:d8ff08e49644040e839cb207c0ee981139abbe7d68e77cb9d78b7f33d155360f",
+      "asset_version": "sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589",
+      "scene_set_version": "sha256:b46cad2d38477b75e1ae310a1750efb03f99bc4e7bf9d96bef14c49982fa3d1b",
+      "scene_indices": [
+        0
+      ],
+      "start_seconds": 0.0,
+      "end_seconds": 4.0,
+      "score": 0.63,
+      "text": "chunk 0 text",
+      "sources": [
+        {
+          "source_id": "local",
+          "asset_id": "asset-0000000000000001",
+          "filename": "clip.mp4"
+        }
+      ]
+    }
+  ],
+  "served": {
+    "query_config": "11d0a9e2c4f1",
+    "embedding_fingerprint": "5e2d4c6b8a90",
+    "chunking_fingerprint": null,
+    "collection": "chunks_5e2d4c6b8a90"
+  }
+}

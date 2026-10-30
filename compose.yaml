@@ -3,6 +3,7 @@
 # loop, the scene-api role on localhost:${SCENE_API_PORT:-8080}, and the retrieval service's
 # chunking and embedding workers and its query-api role on localhost:${QUERY_API_PORT:-8081}
 # (REST routes and the MCP transport at /mcp). Drop media into extraction/data/media/.
+# The evaluation service runs on demand under the `evaluation` profile (see its entry).
 #
 # Each image's own pull-models role pulls the models its configs name: extraction's the vision
 # model (enrichment config), retrieval's the embedding model (embedding config) and the
@@ -246,9 +247,30 @@ services:
       timeout: 3s
       retries: 6
 
+  # The evaluation service, on demand only (profile `evaluation`, so `up` leaves it out): it
+  # puts a dataset from evaluation/data/ to query-api over the compose network and keeps
+  # runs and verdicts in the eval-store volume.
+  #   docker compose run --rm evaluation run --dataset /datasets/example/1.0.0.jsonl
+  #   docker compose run --rm evaluation compare --candidate run-… [--baseline run-…]
+  evaluation:
+    build: ./evaluation
+    image: scene-rag-evaluation
+    profiles: ["evaluation"]
+    restart: "no"
+    environment:
+      SCENE_RAG_EVALUATION_QUERY_API_URL: http://query-api:8081
+      SCENE_RAG_EVALUATION_EVAL_STORE_ROOT: /data/eval-store
+    volumes:
+      - ./evaluation/data:/datasets:ro,z
+      - eval-store:/data/eval-store
+    depends_on:
+      query-api:
+        condition: service_healthy
+
 volumes:
   mongo-data:
   ollama-models:
   derivatives:
   whisper-cache:
   qdrant-data:
+  eval-store:

@@ -1,0 +1,25 @@
+# pdm (PEP 582 mode) / Python tooling
+__pypackages__/
+__pycache__/
+.pdm-python
+.pdm-build/
+.venv/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.py[cod]
+*.log
+
+# Local settings; copy from .env.example. Never committed.
+.env
+
+# Test artifacts
+.coverage
+.coverage.*
+htmlcov/
+
+# data/ holds the datasets, which are committed, and the local Eval Store, which is not:
+# `pdm run` writes runs and verdicts to data/eval-store/.
+data/eval-store/

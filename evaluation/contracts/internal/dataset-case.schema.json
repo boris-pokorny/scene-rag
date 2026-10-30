@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scene-rag.example/evaluation/internal/dataset-case.schema.json",
+  "title": "DatasetCase",
+  "description": "One line of a dataset file <name>/<major.minor.patch>.jsonl. Relevance is labelled by asset version and time span, not by chunk, so the dataset stays valid across chunking strategies and rebuilds. A source is relevant when it overlaps a relevant span of the same asset version, and leaks when it overlaps a forbidden one.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "question", "relevant"],
+  "properties": {
+    "id": { "description": "Unique within the dataset.", "type": "string", "minLength": 1 },
+    "question": { "type": "string", "minLength": 1 },
+    "relevant": {
+      "description": "Spans a correct search finds; empty for an unanswerable question, whose correct answer is a refusal.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/span" }
+    },
+    "forbidden": {
+      "description": "Spans the caller must never see, for access-control cases.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/span" }
+    },
+    "reference_answer": {
+      "description": "The expected answer, for a judge.",
+      "type": ["string", "null"]
+    },
+    "tags": {
+      "description": "Labels the aggregates are broken down by.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "caller_entitlements": {
+      "description": "Entitlements the question is asked under; none sees nothing. Printable ASCII without spaces or commas, since they travel in a comma-separated header.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[!-+\\--~]+$" }
+    }
+  },
+  "$defs": {
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "asset_version", "start_seconds", "end_seconds"],
+      "properties": {
+        "asset_id": { "description": "Informational; never matched.", "type": "string", "minLength": 1 },
+        "asset_version": { "description": "Content hash of the asset version; what sources are matched by.", "type": "string", "minLength": 1 },
+        "start_seconds": { "type": "number", "minimum": 0 },
+        "end_seconds": { "description": "After start_seconds.", "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

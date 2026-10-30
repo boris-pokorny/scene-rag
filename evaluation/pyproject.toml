@@ -1,0 +1,83 @@
+[project]
+name = "scene-rag-evaluation"
+version = "0.1.0"
+description = "scene-rag evaluation service: run a dataset against query-api, compare runs, gate releases"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.14"
+# The service reaches query-api over HTTP with the standard library and keeps the Eval Store
+# as JSON files, so it has no runtime dependencies.
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.12",
+    "mypy>=1.19",
+    "jsonschema>=4",
+    "hypothesis>=6",
+    "pytest-cov>=6",
+]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.build]
+package-dir = "src"
+includes = ["src/scene_rag"]
+
+[tool.pdm.scripts]
+# Load this service's .env for every `pdm run`; real environment variables win.
+_.env_file = ".env"
+lint = { composite = [
+    "ruff check src tests",
+    "ruff format --check src tests",
+] }
+format = "ruff format src tests"
+typecheck = "mypy"
+test = "pytest --cov"
+run-eval = "python -m scene_rag.evaluation run"
+compare = "python -m scene_rag.evaluation compare"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "."]
+extend-exclude = ["__pypackages__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "D", "ANN"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D1"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = [
+    "jsonschema",
+    "jsonschema.*",
+]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["scene_rag.evaluation"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 95
+exclude_also = ["if __name__ == .__main__.:"]
+show_missing = true
+skip_covered = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

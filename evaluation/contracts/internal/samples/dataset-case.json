@@ -1,0 +1,11 @@
+{
+  "id": "q-017",
+  "question": "When does the presenter switch to the architecture diagram?",
+  "relevant": [
+    {"asset_id": "asset-0000000000000001", "asset_version": "sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589", "start_seconds": 4.0, "end_seconds": 8.0}
+  ],
+  "forbidden": [],
+  "reference_answer": "Around 0:04, right after the introduction.",
+  "tags": ["visual", "temporal"],
+  "caller_entitlements": ["public"]
+}
